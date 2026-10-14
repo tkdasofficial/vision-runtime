@@ -40,7 +40,7 @@ def test_unknown_operation_rejected():
     for bad in ["bash", "../checksum", "checksum; rm -rf /", ""]:
         with pytest.raises(OpError):
             get(bad)
-    assert set(OPERATIONS) == {"checksum", "image_convert", "video_convert"}
+    assert set(OPERATIONS) == {"checksum", "image_convert", "video_convert", "audio_convert", "office_convert", "data_convert", "archive_convert", "ebook_convert", "font_convert", "render"}
 
 
 # ---- images ----
