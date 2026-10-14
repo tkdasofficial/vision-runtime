@@ -5,7 +5,10 @@ from runtime.operations import get, OpError
 
 def run(op, path, tmp_path, **params):
     w = tmp_path / "w"; w.mkdir(exist_ok=True)
-    return get(op).run(str(path), params, str(w))
+    r = get(op).run(str(path), params, str(w))
+    # The runner rejects outputs outside the work dir, so every op must write there directly.
+    assert os.path.dirname(os.path.realpath(r["output"])) == os.path.realpath(str(w))
+    return r
 
 def tone(tmp_path):
     p = tmp_path / "tone.wav"
