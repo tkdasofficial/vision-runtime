@@ -56,9 +56,9 @@ def op_checksum(inp, params, workdir):
 
 
 # ---------- image format conversion (no editing) ----------
-IMAGE_FORMATS = {"png": "PNG", "jpeg": "JPEG", "webp": "WEBP", "gif": "GIF", "bmp": "BMP", "tiff": "TIFF", "ico": "ICO"}
-IMAGE_MIME = {"png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp", "gif": "image/gif", "bmp": "image/bmp", "tiff": "image/tiff", "ico": "image/x-icon"}
-NO_ALPHA = {"jpeg", "bmp"}
+IMAGE_FORMATS = {"png": "PNG", "jpeg": "JPEG", "webp": "WEBP", "gif": "GIF", "bmp": "BMP", "tiff": "TIFF", "ico": "ICO", "avif": "AVIF", "pdf": "PDF"}
+IMAGE_MIME = {"png": "image/png", "jpeg": "image/jpeg", "webp": "image/webp", "gif": "image/gif", "bmp": "image/bmp", "tiff": "image/tiff", "ico": "image/x-icon", "avif": "image/avif", "pdf": "application/pdf"}
+NO_ALPHA = {"jpeg", "bmp", "pdf"}
 
 
 def op_image_convert(inp, params, workdir):
@@ -68,6 +68,21 @@ def op_image_convert(inp, params, workdir):
     if target not in IMAGE_FORMATS:
         raise OpError(f"Unsupported output format. Supported: {', '.join(sorted(IMAGE_FORMATS))}.")
     Image.MAX_IMAGE_PIXELS = 80_000_000  # decompression-bomb guard
+    try:  # HEIC/HEIF (and AVIF on older Pillow) decoders
+        from pillow_heif import register_heif_opener
+        register_heif_opener()
+    except Exception:
+        pass
+    with open(inp, "rb") as fh:
+        head = fh.read(512).lstrip()
+    if head.startswith(b"<svg") or (head.startswith(b"<?xml") and b"<svg" in head):
+        import cairosvg
+        png = os.path.join(workdir, "svg.png")
+        try:
+            cairosvg.svg2png(url=inp, write_to=png, unsafe=False)
+        except Exception:
+            raise OpError("The SVG could not be rendered.")
+        inp = png
     try:
         with Image.open(inp) as probe:
             probe.verify()
@@ -99,6 +114,11 @@ def op_image_convert(inp, params, workdir):
     if target == "webp" and src in ("png", "gif", "bmp", "tiff"):
         kw = {"lossless": True}
     img.save(out, IMAGE_FORMATS[target], **kw)
+    if target == "pdf":
+        from pypdf import PdfReader
+        if len(PdfReader(out).pages) != 1:
+            raise OpError("The produced PDF did not verify.")
+        return {"output": out, "mime": IMAGE_MIME[target], "result": {"from": src, "to": target, "width": w, "height": h, "warnings": warnings}}
     with Image.open(out) as check:
         if check.size != (w, h):
             raise OpError("Converted image dimensions did not match the original.")
@@ -111,6 +131,11 @@ VIDEO_TARGETS = {
     "webm": (["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "33", "-row-mt", "1", "-deadline", "good", "-cpu-used", "4", "-c:a", "libopus", "-b:a", "96k"], "video/webm"),
     "mov": (["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k"], "video/quicktime"),
     "mkv": (["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k"], "video/x-matroska"),
+    "m4v": (["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-f", "mp4"], "video/x-m4v"),
+    "avi": (["-c:v", "mpeg4", "-q:v", "4", "-c:a", "libmp3lame", "-b:a", "160k"], "video/x-msvideo"),
+    "wmv": (["-c:v", "wmv2", "-q:v", "4", "-c:a", "wmav2", "-b:a", "160k"], "video/x-ms-wmv"),
+    "mpeg": (["-c:v", "mpeg2video", "-q:v", "4", "-c:a", "mp2", "-b:a", "192k", "-f", "mpeg"], "video/mpeg"),
+    "3gp": (["-c:v", "libx264", "-profile:v", "baseline", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "64k", "-ac", "1", "-ar", "22050", "-f", "3gp"], "video/3gpp"),
 }
 MAX_VIDEO_SECONDS = 15 * 60
 
@@ -163,7 +188,16 @@ def op_video_convert(inp, params, workdir):
     }}
 
 
+from runtime import format_ops as F  # noqa: E402
+
 OPERATIONS: dict[str, Operation] = {
+    "audio_convert": Operation("audio_convert", True, 25 * MB, 150 * MB, 1200, F.op_audio_convert),
+    "office_convert": Operation("office_convert", True, 25 * MB, 60 * MB, 600, F.op_office_convert),
+    "data_convert": Operation("data_convert", True, 25 * MB, 100 * MB, 600, F.op_data_convert),
+    "archive_convert": Operation("archive_convert", True, 25 * MB, 100 * MB, 600, F.op_archive_convert),
+    "ebook_convert": Operation("ebook_convert", True, 25 * MB, 60 * MB, 900, F.op_ebook_convert),
+    "font_convert": Operation("font_convert", True, 25 * MB, 30 * MB, 300, F.op_font_convert),
+    "render": Operation("render", True, 5 * MB, 30 * MB, 600, F.op_render),
     "checksum": Operation("checksum", True, 25 * MB, 0, 300, op_checksum),
     "image_convert": Operation("image_convert", True, 25 * MB, 60 * MB, 300, op_image_convert),
     "video_convert": Operation("video_convert", True, 25 * MB, 100 * MB, 1500, op_video_convert),
