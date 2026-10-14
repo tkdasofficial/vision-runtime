@@ -1,1 +1,11 @@
 Pillow==11.3.0
+pillow-heif==1.1.0
+cairosvg==2.8.2
+pypdf==5.9.0
+pyarrow==21.0.0
+fastavro==1.12.0
+pyshp==2.3.1
+fonttools==4.59.0
+brotli==1.1.0
+ezdxf==1.4.2
+matplotlib==3.10.5
