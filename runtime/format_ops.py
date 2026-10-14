@@ -133,7 +133,8 @@ def op_office_convert(inp, params, workdir):
     outs = [os.path.join(outdir, f) for f in os.listdir(outdir)]
     if r.returncode != 0 or not outs:
         raise OpError("LibreOffice could not convert this file (it may be damaged or password-protected).")
-    out = _nonempty(outs[0])
+    out = os.path.join(workdir, f"converted.{target}")  # runner only accepts outputs directly in the work dir
+    shutil.move(_nonempty(outs[0]), out)
     res = {"from": src, "to": target}
     if target == "pdf":
         from pypdf import PdfReader
