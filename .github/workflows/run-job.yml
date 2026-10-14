@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       job_id: { description: "VISION job id (UUID)", required: true, type: string }
-      operation: { description: "Registered operation", required: true, type: choice, options: [checksum, image_convert, video_convert] }
+      operation: { description: "Registered operation", required: true, type: choice, options: [checksum, image_convert, video_convert, audio_convert, office_convert, data_convert, archive_convert, ebook_convert, font_convert, render] }
 
 permissions:
   contents: read
@@ -26,9 +26,22 @@ jobs:
         with: { persist-credentials: false }
       - name: Install pinned dependencies
         run: python3 -m pip install --quiet --break-system-packages -r requirements.txt
-      - name: Install ffmpeg
-        if: inputs.operation == 'video_convert'
-        run: command -v ffmpeg >/dev/null || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg >/dev/null)
+      - name: Install native tools for this operation only
+        env:
+          OPERATION: ${{ inputs.operation }}
+        run: |
+          pkgs=""
+          case "$OPERATION" in
+            video_convert|audio_convert) pkgs="ffmpeg" ;;
+            image_convert) pkgs="libcairo2" ;;
+            office_convert) pkgs="libreoffice-writer libreoffice-calc libreoffice-impress" ;;
+            archive_convert) pkgs="7zip" ;;
+            ebook_convert) pkgs="calibre 7zip" ;;
+            render) pkgs="graphviz plantuml texlive-latex-base texlive-latex-recommended texlive-fonts-recommended libcairo2" ;;
+          esac
+          if [ -n "$pkgs" ]; then sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends $pkgs >/dev/null; fi
+          if [ "$OPERATION" = "archive_convert" ] || [ "$OPERATION" = "ebook_convert" ]; then command -v 7z >/dev/null || sudo ln -sf "$(command -v 7zz)" /usr/local/bin/7z; fi
+          if [ "$OPERATION" = "render" ]; then npm install -g --silent @mermaid-js/mermaid-cli@11.4.2 >/dev/null; fi
       - name: Run job
         env:
           JOB_ID: ${{ inputs.job_id }}
