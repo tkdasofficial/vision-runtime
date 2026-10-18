@@ -16,6 +16,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -29,7 +30,7 @@ VERSION = 3
 MAX_UNITS = 100
 MAX_BRIEF_CHARS = 60_000
 REPAIR_ROUNDS = 2
-PARALLEL = 6
+PARALLEL = 4
 MIN_SCORE = 90
 CALL_TIMEOUT_S = 240
 DEFAULT_SECTIONS = ["Subject", "Characters", "Setting", "Action", "Camera", "Lighting", "Style", "Negative"]
@@ -56,26 +57,56 @@ def _post(url: str, key: str, payload: dict) -> str:
     return re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
 
 
+NVIDIA_RPM = 40          # Nemotron 3 Super quota: 40 requests per minute
+NVIDIA_CONCURRENCY = 4   # at most 4 requests in flight at once
+
+
+class _RateLimiter:
+    """Thread-safe sliding 60s window plus a concurrency cap, shared by every thread in the job."""
+
+    def __init__(self, rpm: int, concurrency: int):
+        self.rpm, self.sem, self.lock, self.stamps = rpm, threading.BoundedSemaphore(concurrency), threading.Lock(), []
+
+    def acquire(self):
+        self.sem.acquire()
+        while True:
+            with self.lock:
+                now = time.time()
+                self.stamps = [t for t in self.stamps if now - t < 60]
+                if len(self.stamps) < self.rpm:
+                    self.stamps.append(now)
+                    return
+                wait = 60 - (now - self.stamps[0]) + 0.05
+            time.sleep(wait)
+
+    def release(self):
+        self.sem.release()
+
+
+NVIDIA_LIMIT = _RateLimiter(NVIDIA_RPM, NVIDIA_CONCURRENCY)
+
+
 def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False, think: bool = False) -> str:
-    """NVIDIA first, Groq fallback; one bounded retry per provider on transient errors only."""
-    order = ((NVIDIA_URL, "NVIDIA_API_KEY", NVIDIA_MODEL), (GROQ_URL, "GROQ_API_KEY", GROQ_MODEL))
-    if json_mode:  # structured steps (plan, reviews, audits) go to the stronger, faster JSON follower first
-        order = order[::-1]
-    providers = [(u, os.environ[k], m) for u, k, m in order if os.environ.get(k)]
+    """Nemotron 3 Super for every step, paced to its quota (40/min, 4 at once). 429 waits and retries on Nemotron;
+    Groq is used only if Nemotron keeps failing with server errors or is unreachable."""
+    providers = [(u, os.environ[k], m) for u, k, m in ((NVIDIA_URL, "NVIDIA_API_KEY", NVIDIA_MODEL), (GROQ_URL, "GROQ_API_KEY", GROQ_MODEL))
+                 if os.environ.get(k)]
     if not providers:
         raise OpError("No AI provider key is configured on the runner.")
     last = "no provider succeeded"
     for url, key, model in providers:
-        for attempt in range(3):
+        nvidia = model == NVIDIA_MODEL
+        for attempt in range(5 if nvidia else 2):
+            payload = {"model": model, "messages": messages, "temperature": 0.4, "max_tokens": max_tokens}
+            if nvidia:
+                payload["chat_template_kwargs"] = {"enable_thinking": think}
+            else:
+                payload["reasoning_effort"] = "medium" if think else "low"
+            if json_mode:
+                payload["response_format"] = {"type": "json_object"}
+            if nvidia:
+                NVIDIA_LIMIT.acquire()
             try:
-                payload = {"model": model, "messages": messages, "temperature": 0.4, "max_tokens": max_tokens}
-                # Speed: hidden reasoning is off — the plan, deterministic gate and independent audit do the checking.
-                if model == NVIDIA_MODEL:
-                    payload["chat_template_kwargs"] = {"enable_thinking": think}
-                else:
-                    payload["reasoning_effort"] = "medium" if think else "low"
-                if json_mode:
-                    payload["response_format"] = {"type": "json_object"}
                 t = time.time()
                 text = _post(url, key, payload)
                 print(f"[prompts] call {model.split('/')[-1]} {round(time.time() - t)}s chars={len(text)}", flush=True)
@@ -90,15 +121,16 @@ def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False
                         wait = float(e.headers.get("retry-after") or 0)
                     except (TypeError, ValueError):
                         wait = 0
-                    if attempt or len(providers) > 1 and (url, key, model) != providers[-1]:
-                        break  # rate limited: move to the other provider instead of waiting
-                    time.sleep(min(max(wait, 5), 15))
+                    time.sleep(min(max(wait, 3 * (attempt + 1)), 30))
                     continue
                 if e.code < 500:
                     break
             except Exception as e:
                 last = "provider unreachable"
                 print(f"[prompts] call {model.split('/')[-1]} failed {type(e).__name__}", flush=True)
+            finally:
+                if nvidia:
+                    NVIDIA_LIMIT.release()
             time.sleep(2 * (attempt + 1))
     raise OpError(f"The AI providers could not complete this step ({last}).")
 
@@ -114,17 +146,8 @@ def _ai(messages, max_tokens, json_mode=False, think=False):
 
 
 def auditor_call(messages, max_tokens, json_mode=False):
-    """Audits run on a different model than the writer (Groq first) so the series is not graded by its own author."""
-    saved = os.environ.pop("NVIDIA_API_KEY", None) if os.environ.get("GROQ_API_KEY") else None
-    try:
-        return provider_call(messages, max_tokens, json_mode)
-    except OpError:
-        if saved is None:
-            raise
-    finally:
-        if saved is not None:
-            os.environ["NVIDIA_API_KEY"] = saved
-    return provider_call(messages, max_tokens, json_mode)  # auditor unavailable/too small: fall back, still a separate pass
+    """Checks run as separate Nemotron passes with their own instructions; code, not the model, makes the final judgement."""
+    return provider_call(messages, max_tokens, json_mode)
 
 
 AUDIT_CALL: Callable[..., str] = auditor_call

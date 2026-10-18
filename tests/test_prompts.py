@@ -95,3 +95,16 @@ def test_backwards_time_is_repaired():
     p = plan(3); p["outline"][1]["time"] = "D1 23:50"; p["outline"][2]["time"] = "D1 00:20"
     assert not [i for i in P.validate_plan(p, 3) if "time" in i]
     assert p["outline"][2]["time"] == "D2 00:20"
+
+def test_nemotron_pacing_limits():
+    import threading, time as _t
+    lim = P._RateLimiter(3, 2); inflight = []; peak = [0]; lock = threading.Lock()
+    def go():
+        lim.acquire()
+        with lock: inflight.append(1); peak[0] = max(peak[0], len(inflight))
+        _t.sleep(0.05)
+        with lock: inflight.pop()
+        lim.release()
+    ts = [threading.Thread(target=go) for _ in range(3)]; [t.start() for t in ts]; [t.join() for t in ts]
+    assert peak[0] <= 2 and len(lim.stamps) == 3
+    assert P.NVIDIA_RPM == 40 and P.NVIDIA_CONCURRENCY == 4
