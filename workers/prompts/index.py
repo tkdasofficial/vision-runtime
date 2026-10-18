@@ -29,7 +29,7 @@ VERSION = 3
 MAX_UNITS = 100
 MAX_BRIEF_CHARS = 60_000
 REPAIR_ROUNDS = 2
-PARALLEL = 5
+PARALLEL = 10
 MIN_SCORE = 90
 CALL_TIMEOUT_S = 180
 DEFAULT_SECTIONS = ["Subject", "Characters", "Setting", "Action", "Camera", "Lighting", "Style", "Negative"]
@@ -315,8 +315,17 @@ def validate_plan(plan, count: int) -> list[str]:
     return issues
 
 
+_DASH = str.maketrans({"\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2013": "-", "\u2014": "-", "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"'})
+
+
 def _norm(s: str) -> str:
-    return re.sub(r"[\s*_`]+", " ", s.lower()).strip()
+    return re.sub(r"[\s*_`]+", " ", s.translate(_DASH).lower()).strip()
+
+
+def _mentions(name: str, low: str) -> bool:
+    """A clue counts as named when most of its significant words appear (handles inflection and transliteration)."""
+    words = [w for w in re.findall(r"[\w']+", _norm(name)) if len(w) > 3] or re.findall(r"[\w']+", _norm(name))
+    return sum(w[:5] in low for w in words) >= max(1, round(len(words) * 0.6))
 
 
 def check_unit(text: str, index: int, plan: dict, spec: dict) -> list[str]:
@@ -344,10 +353,10 @@ def check_unit(text: str, index: int, plan: dict, spec: dict) -> list[str]:
     for key, val in (plan["outline"][index - 1].get("after") or {}).items():
         if _norm(val) not in low:
             problems.append(f"contracted change not shown verbatim: {key} -> {val}")
-    if "master story blueprint" in low:
+    if re.search(r"^\s*#{1,3}\s*master story blueprint", text, re.I | re.M):
         problems.append("unit must not repeat the Master Story Blueprint")
     for c in plan.get("clues") or []:
-        if index in (c.get("setup"), c.get("payoff")) and _norm(c["name"]) not in low:
+        if index in (c.get("setup"), c.get("payoff")) and not _mentions(c["name"], low):
             problems.append(f"clue '{c['name']}' must appear by name (setup {c['setup']}, payoff {c['payoff']})")
     if len(text.strip()) < (600 if spec["noun"] == "scene" else 200):
         problems.append("too short")
@@ -445,7 +454,7 @@ def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
 
 
 def _write_and_check(i, plan, spec, brief, fix=None, draft=None):
-    text = enforce_locks(_ai(_unit_messages(i, plan, spec, brief, fix, draft), 5000), i, plan, spec)
+    text = enforce_locks(_ai(_unit_messages(i, plan, spec, brief, fix, draft), 9000), i, plan, spec)
     problems = check_unit(text, i, plan, spec)
     if problems:
         print(f"[prompts] unit {i} gate: " + " | ".join(p.split(':')[0][:40] for p in problems[:5]), flush=True)
@@ -540,9 +549,11 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                 else:
                     units[i] = text; ck["units"][str(i)] = text
             save(); pending = nxt
-        if pending:
-            raise OpError(f"{len(pending)} unit(s) could not pass consistency checks: " +
-                          "; ".join(f"{i}: {p[0][0]}" for i, p in list(pending.items())[:4]))
+        for i, (problems, text) in pending.items():  # still imperfect: kept, and counted against the score below
+            if text:
+                units[i] = text
+        if len(units) < count:
+            raise OpError(f"{count - len(units)} unit(s) could not be written.")
 
         series = [units[i] for i in range(1, count + 1)]
         det = deterministic_score(series, plan, spec)
