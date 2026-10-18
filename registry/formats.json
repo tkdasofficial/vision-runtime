@@ -12,12 +12,8 @@
    "workflow": "documents",
    "worker": "documents",
    "dependencies": {
-    "apt": [
-     "libreoffice-writer"
-    ],
-    "pip": [
-     "pypdf==5.9.0"
-    ]
+    "apt": [],
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -126,12 +122,8 @@
    "workflow": "documents",
    "worker": "documents",
    "dependencies": {
-    "apt": [
-     "libreoffice-writer"
-    ],
-    "pip": [
-     "pypdf==5.9.0"
-    ]
+    "apt": [],
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -161,12 +153,8 @@
    "workflow": "documents",
    "worker": "documents",
    "dependencies": {
-    "apt": [
-     "libreoffice-writer"
-    ],
-    "pip": [
-     "pypdf==5.9.0"
-    ]
+    "apt": [],
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -278,12 +266,8 @@
    "workflow": "documents",
    "worker": "documents",
    "dependencies": {
-    "apt": [
-     "libreoffice-writer"
-    ],
-    "pip": [
-     "pypdf==5.9.0"
-    ]
+    "apt": [],
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -315,8 +299,8 @@
    "worker": "ebooks",
    "dependencies": {
     "apt": [
-     "calibre",
-     "7zip"
+     "7zip",
+     "calibre"
     ],
     "pip": [
      "pypdf==5.9.0"
@@ -354,13 +338,13 @@
     "tex",
     "latex"
    ],
-   "workflow": "tex",
+   "workflow": "documents",
    "worker": "documents",
    "dependencies": {
     "apt": [
+     "texlive-fonts-recommended",
      "texlive-latex-base",
-     "texlive-latex-recommended",
-     "texlive-fonts-recommended"
+     "texlive-latex-recommended"
     ],
     "pip": [
      "pypdf==5.9.0"
@@ -576,12 +560,8 @@
    "workflow": "spreadsheets",
    "worker": "spreadsheets",
    "dependencies": {
-    "apt": [
-     "libreoffice-calc"
-    ],
-    "pip": [
-     "pypdf==5.9.0"
-    ]
+    "apt": [],
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -671,10 +651,7 @@
    "worker": "data",
    "dependencies": {
     "apt": [],
-    "pip": [
-     "pyarrow==21.0.0",
-     "fastavro==1.12.0"
-    ]
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -712,10 +689,7 @@
    "worker": "data",
    "dependencies": {
     "apt": [],
-    "pip": [
-     "pyarrow==21.0.0",
-     "fastavro==1.12.0"
-    ]
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -827,10 +801,7 @@
    "worker": "data",
    "dependencies": {
     "apt": [],
-    "pip": [
-     "pyarrow==21.0.0",
-     "fastavro==1.12.0"
-    ]
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -860,7 +831,7 @@
     "sqlite3",
     "db"
    ],
-   "workflow": "sqlite",
+   "workflow": "data",
    "worker": "data",
    "dependencies": {
     "apt": [],
@@ -2367,14 +2338,18 @@
    "aliases": [
     "svg"
    ],
-   "workflow": "vector",
+   "workflow": "diagrams",
    "worker": "diagrams",
    "dependencies": {
     "apt": [
-     "libcairo2"
+     "graphviz",
+     "libcairo2",
+     "plantuml"
     ],
     "pip": [
      "cairosvg==2.8.2",
+     "ezdxf==1.4.2",
+     "matplotlib==3.10.5",
      "pypdf==5.9.0"
     ]
    },
@@ -3165,9 +3140,7 @@
    "workflow": "archives",
    "worker": "archives",
    "dependencies": {
-    "apt": [
-     "7zip"
-    ],
+    "apt": [],
     "pip": []
    },
    "capabilities": {
@@ -3454,8 +3427,8 @@
    "worker": "ebooks",
    "dependencies": {
     "apt": [
-     "calibre",
-     "7zip"
+     "7zip",
+     "calibre"
     ],
     "pip": [
      "pypdf==5.9.0"
@@ -3495,8 +3468,8 @@
    "worker": "ebooks",
    "dependencies": {
     "apt": [
-     "calibre",
-     "7zip"
+     "7zip",
+     "calibre"
     ],
     "pip": [
      "pypdf==5.9.0"
@@ -3535,8 +3508,8 @@
    "worker": "ebooks",
    "dependencies": {
     "apt": [
-     "calibre",
-     "7zip"
+     "7zip",
+     "calibre"
     ],
     "pip": [
      "pypdf==5.9.0"
@@ -3577,8 +3550,8 @@
    "worker": "ebooks",
    "dependencies": {
     "apt": [
-     "calibre",
-     "7zip"
+     "7zip",
+     "calibre"
     ],
     "pip": [
      "pypdf==5.9.0"
@@ -3610,7 +3583,7 @@
    "aliases": [
     "cbr"
    ],
-   "workflow": "comics",
+   "workflow": "archives",
    "worker": "archives",
    "dependencies": {
     "apt": [
@@ -3643,11 +3616,18 @@
     "mmd",
     "mermaid"
    ],
-   "workflow": "mermaid",
+   "workflow": "diagrams",
    "worker": "diagrams",
    "dependencies": {
-    "apt": [],
+    "apt": [
+     "graphviz",
+     "libcairo2",
+     "plantuml"
+    ],
     "pip": [
+     "cairosvg==2.8.2",
+     "ezdxf==1.4.2",
+     "matplotlib==3.10.5",
      "pypdf==5.9.0"
     ]
    },
@@ -3680,13 +3660,18 @@
     "dot",
     "gv"
    ],
-   "workflow": "graphviz",
+   "workflow": "diagrams",
    "worker": "diagrams",
    "dependencies": {
     "apt": [
-     "graphviz"
+     "graphviz",
+     "libcairo2",
+     "plantuml"
     ],
     "pip": [
+     "cairosvg==2.8.2",
+     "ezdxf==1.4.2",
+     "matplotlib==3.10.5",
      "pypdf==5.9.0"
     ]
    },
@@ -3750,14 +3735,18 @@
     "plantuml",
     "pu"
    ],
-   "workflow": "plantuml",
+   "workflow": "diagrams",
    "worker": "diagrams",
    "dependencies": {
     "apt": [
-     "plantuml",
-     "graphviz"
+     "graphviz",
+     "libcairo2",
+     "plantuml"
     ],
     "pip": [
+     "cairosvg==2.8.2",
+     "ezdxf==1.4.2",
+     "matplotlib==3.10.5",
      "pypdf==5.9.0"
     ]
    },
@@ -3789,11 +3778,16 @@
    "aliases": [
     "dxf"
    ],
-   "workflow": "cad",
+   "workflow": "diagrams",
    "worker": "diagrams",
    "dependencies": {
-    "apt": [],
+    "apt": [
+     "graphviz",
+     "libcairo2",
+     "plantuml"
+    ],
     "pip": [
+     "cairosvg==2.8.2",
      "ezdxf==1.4.2",
      "matplotlib==3.10.5",
      "pypdf==5.9.0"
@@ -4024,11 +4018,7 @@
    "worker": "maps",
    "dependencies": {
     "apt": [],
-    "pip": [
-     "pyarrow==21.0.0",
-     "fastavro==1.12.0",
-     "pyshp==2.3.1"
-    ]
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -4056,11 +4046,7 @@
    "worker": "maps",
    "dependencies": {
     "apt": [],
-    "pip": [
-     "pyarrow==21.0.0",
-     "fastavro==1.12.0",
-     "pyshp==2.3.1"
-    ]
+    "pip": []
    },
    "capabilities": {
     "create": true,
@@ -4088,11 +4074,7 @@
    "worker": "maps",
    "dependencies": {
     "apt": [],
-    "pip": [
-     "pyarrow==21.0.0",
-     "fastavro==1.12.0",
-     "pyshp==2.3.1"
-    ]
+    "pip": []
    },
    "capabilities": {
     "create": true,

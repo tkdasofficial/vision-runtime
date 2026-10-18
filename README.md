@@ -1,6 +1,6 @@
 # Vision-Runtime
 
-Background execution runtime for VISION. The backend dispatches one of **28 workflows**
+Background execution runtime for VISION. The backend dispatches one of **18 workflows** (one per worker,
 (`.github/workflows/<name>.yml`, generated from `registry/workflows.json`) with only a job id
 and operation. Each workflow installs only its worker's dependencies and runs
 `runtime/runner.py`, which:

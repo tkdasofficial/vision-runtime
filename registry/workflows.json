@@ -3,6 +3,8 @@
   "worker": "documents",
   "ops": [
    "office_convert",
+   "render",
+   "story_generate",
    "checksum"
   ],
   "sources": [
@@ -13,22 +15,7 @@
    "txt",
    "html",
    "md",
-   "pdf"
-  ]
- },
- "story": {
-  "worker": "documents",
-  "ops": [
-   "story_generate"
-  ]
- },
- "tex": {
-  "worker": "documents",
-  "ops": [
-   "render",
-   "checksum"
-  ],
-  "sources": [
+   "pdf",
    "tex"
   ]
  },
@@ -59,16 +46,7 @@
    "json",
    "jsonl",
    "xml",
-   "sql"
-  ]
- },
- "sqlite": {
-  "worker": "data",
-  "ops": [
-   "data_convert",
-   "checksum"
-  ],
-  "sources": [
+   "sql",
    "sqlite",
    "db"
   ]
@@ -157,16 +135,6 @@
    "heif"
   ]
  },
- "vector": {
-  "worker": "diagrams",
-  "ops": [
-   "render",
-   "checksum"
-  ],
-  "sources": [
-   "svg"
-  ]
- },
  "audio": {
   "worker": "audio",
   "ops": [
@@ -217,16 +185,7 @@
    "gz",
    "tgz",
    "7z",
-   "rar"
-  ]
- },
- "comics": {
-  "worker": "archives",
-  "ops": [
-   "archive_convert",
-   "checksum"
-  ],
-  "sources": [
+   "rar",
    "cbz",
    "cbr"
   ]
@@ -260,54 +219,20 @@
  "diagrams": {
   "worker": "diagrams",
   "ops": [
+   "render",
    "checksum"
   ],
   "sources": [
+   "svg",
+   "mmd",
+   "mermaid",
+   "dot",
+   "gv",
+   "puml",
+   "plantuml",
+   "dxf",
    "drawio",
    "dio"
-  ]
- },
- "mermaid": {
-  "worker": "diagrams",
-  "ops": [
-   "render",
-   "checksum"
-  ],
-  "sources": [
-   "mmd",
-   "mermaid"
-  ]
- },
- "graphviz": {
-  "worker": "diagrams",
-  "ops": [
-   "render",
-   "checksum"
-  ],
-  "sources": [
-   "dot",
-   "gv"
-  ]
- },
- "plantuml": {
-  "worker": "diagrams",
-  "ops": [
-   "render",
-   "checksum"
-  ],
-  "sources": [
-   "puml",
-   "plantuml"
-  ]
- },
- "cad": {
-  "worker": "diagrams",
-  "ops": [
-   "render",
-   "checksum"
-  ],
-  "sources": [
-   "dxf"
   ]
  },
  "fonts": {
@@ -357,17 +282,6 @@
   ]
  },
  "logs": {
-  "worker": "logs",
-  "ops": [
-   "checksum"
-  ],
-  "sources": [
-   "log",
-   "diff",
-   "patch"
-  ]
- },
- "terminal": {
   "worker": "logs",
   "ops": [
    "checksum"

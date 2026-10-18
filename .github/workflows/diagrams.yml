@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       job_id: { description: "VISION job id (UUID)", required: true, type: string }
-      operation: { description: "Registered operation", required: true, type: choice, options: [checksum] }
+      operation: { description: "Registered operation", required: true, type: choice, options: [render, checksum] }
 
 permissions:
   contents: read
@@ -20,10 +20,18 @@ jobs:
   run:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { persist-credentials: false }
+      - name: Install worker dependencies
+        if: inputs.operation != 'checksum'
+        run: python3 -m pip install --quiet --break-system-packages cairosvg==2.8.2 ezdxf==1.4.2 matplotlib==3.10.5 pypdf==5.9.0
+      - name: Install native tools (render)
+        if: inputs.operation == 'render'
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends graphviz plantuml libcairo2 >/dev/null
+      - if: inputs.operation == 'render'
+        run: npm install -g --silent @mermaid-js/mermaid-cli@11.4.2 >/dev/null
       - name: Run worker
         env:
           JOB_ID: ${{ inputs.job_id }}

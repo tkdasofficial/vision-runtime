@@ -25,8 +25,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { persist-credentials: false }
       - name: Install worker dependencies
+        if: inputs.operation != 'checksum'
         run: python3 -m pip install --quiet --break-system-packages pypdf==5.9.0
-      - name: Install native tools
+      - name: Install native tools (office_convert)
+        if: inputs.operation == 'office_convert'
         run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libreoffice-calc >/dev/null
       - name: Run worker
         env:

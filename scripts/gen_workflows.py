@@ -1,52 +1,60 @@
-"""Writes the 28 .github/workflows/<name>.yml files from registry/workflows.json. Run after editing the registry."""
-import json, os
+"""Writes the 18 .github/workflows/<name>.yml files (one per worker) from registry/workflows.json.
+Run after editing the registry; never hand-edit the generated YAML."""
+import json
+import os
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 WF = json.load(open(os.path.join(ROOT, "registry", "workflows.json")))
+
+# Native tools per operation, installed only for the operation actually dispatched.
 APT = {
-    "documents": "libreoffice-writer", "spreadsheets": "libreoffice-calc", "presentations": "libreoffice-impress",
-    "tex": "texlive-latex-base texlive-latex-recommended texlive-fonts-recommended", "audio": "ffmpeg", "video": "ffmpeg",
-    "archives": "7zip", "comics": "7zip", "ebooks": "calibre 7zip", "graphviz": "graphviz", "plantuml": "plantuml graphviz",
-    "vector": "libcairo2", "images": "libcairo2",
+    "documents": {"office_convert": "libreoffice-writer", "render": "texlive-latex-base texlive-latex-recommended texlive-fonts-recommended"},
+    "spreadsheets": {"office_convert": "libreoffice-calc"},
+    "presentations": {"office_convert": "libreoffice-impress"},
+    "audio": {"audio_convert": "ffmpeg"},
+    "video": {"video_convert": "ffmpeg"},
+    "archives": {"archive_convert": "7zip"},
+    "ebooks": {"ebook_convert": "calibre 7zip"},
+    "images": {"image_convert": "libcairo2"},
+    "diagrams": {"render": "graphviz plantuml libcairo2"},
 }
 PIP = {
-    "documents": "pypdf==5.9.0", "story": "", "tex": "pypdf==5.9.0", "spreadsheets": "pypdf==5.9.0", "presentations": "pypdf==5.9.0",
-    "data": "pyarrow==21.0.0 fastavro==1.12.0", "sqlite": "pyarrow==21.0.0 fastavro==1.12.0", "maps": "pyarrow==21.0.0 fastavro==1.12.0 pyshp==2.3.1",
-    "images": "Pillow==11.3.0 pillow-heif==1.1.0 cairosvg==2.8.2 pypdf==5.9.0", "vector": "cairosvg==2.8.2 pypdf==5.9.0",
-    "cad": "ezdxf==1.4.2 matplotlib==3.10.5 pypdf==5.9.0", "mermaid": "pypdf==5.9.0", "graphviz": "pypdf==5.9.0", "plantuml": "pypdf==5.9.0",
-    "fonts": "fonttools==4.59.0 brotli==1.1.0", "ebooks": "pypdf==5.9.0",
+    "documents": "pypdf==5.9.0", "spreadsheets": "pypdf==5.9.0", "presentations": "pypdf==5.9.0", "ebooks": "pypdf==5.9.0",
+    "data": "pyarrow==21.0.0 fastavro==1.12.0", "maps": "pyarrow==21.0.0 fastavro==1.12.0 pyshp==2.3.1",
+    "images": "Pillow==11.3.0 pillow-heif==1.1.0 cairosvg==2.8.2 pypdf==5.9.0",
+    "diagrams": "cairosvg==2.8.2 ezdxf==1.4.2 matplotlib==3.10.5 pypdf==5.9.0",
+    "fonts": "fonttools==4.59.0 brotli==1.1.0",
 }
-TIMEOUT = {"story": 45, "video": 40, "audio": 30, "tex": 20, "ebooks": 25}
+TIMEOUT = {"documents": 45, "video": 40, "audio": 30, "ebooks": 25, "diagrams": 20}
 CHECKOUT = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2"
 
-for name, w in WF.items():
+
+def render(name: str, w: dict) -> str:
     ops = w["ops"]
-    inputs = '      job_id: { description: "VISION job id (UUID)", required: true, type: string }\n'
-    if name != "story":
-        inputs += f'      operation: {{ description: "Registered operation", required: true, type: choice, options: [{", ".join(ops)}] }}\n'
     steps = [f"      - uses: {CHECKOUT}\n        with: {{ persist-credentials: false }}"]
     if PIP.get(name):
-        steps.append(f"      - name: Install worker dependencies\n        run: python3 -m pip install --quiet --break-system-packages {PIP[name]}")
-    if APT.get(name):
-        steps.append(f"      - name: Install native tools\n        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends {APT[name]} >/dev/null")
-    if name in ("archives", "comics", "ebooks"):
-        steps.append('      - run: command -v 7z >/dev/null || sudo ln -sf "$(command -v 7zz)" /usr/local/bin/7z')
-    if name == "mermaid":
-        steps.append("      - run: npm install -g --silent @mermaid-js/mermaid-cli@11.4.2 >/dev/null")
-    env = [f"          JOB_ID: ${{{{ inputs.job_id }}}}",
-           "          OPERATION: " + ("story_generate" if name == "story" else "${{ inputs.operation }}"),
-           f"          WORKFLOW: {name}", f"          WORKER: {w['worker']}"]
-    if name == "story":
-        env += ["          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}", "          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}"]
+        steps.append(f"      - name: Install worker dependencies\n        if: inputs.operation != 'checksum'\n        run: python3 -m pip install --quiet --break-system-packages {PIP[name]}")
+    for op, pkgs in APT.get(name, {}).items():
+        steps.append(f"      - name: Install native tools ({op})\n        if: inputs.operation == '{op}'\n        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends {pkgs} >/dev/null")
+    if name in ("archives", "ebooks"):
+        steps.append(f"      - if: inputs.operation != 'checksum'\n        run: command -v 7z >/dev/null || sudo ln -sf \"$(command -v 7zz)\" /usr/local/bin/7z")
+    if name == "diagrams":
+        steps.append("      - if: inputs.operation == 'render'\n        run: npm install -g --silent @mermaid-js/mermaid-cli@11.4.2 >/dev/null")
+    env = ["          JOB_ID: ${{ inputs.job_id }}", "          OPERATION: ${{ inputs.operation }}", f"          WORKFLOW: {name}", f"          WORKER: {w['worker']}"]
+    if "story_generate" in ops:  # AI keys reach only story jobs
+        env += ["          NVIDIA_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.NVIDIA_API_KEY || '' }}",
+                "          GROQ_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.GROQ_API_KEY || '' }}"]
     steps.append("      - name: Run worker\n        env:\n" + "\n".join(env) + "\n        run: python3 runtime/runner.py")
-    body = f"""name: {name}
+    return f"""name: {name}
 # Generated by scripts/gen_workflows.py — routes to workers/{w['worker']}/index.py.
 # Started only by the VISION backend (workflow_dispatch); no push or schedule triggers.
 # Inputs carry no secrets or file data; the runner authenticates to the relay with GitHub OIDC.
 on:
   workflow_dispatch:
     inputs:
-{inputs}
+      job_id: {{ description: "VISION job id (UUID)", required: true, type: string }}
+      operation: {{ description: "Registered operation", required: true, type: choice, options: [{", ".join(ops)}] }}
+
 permissions:
   contents: read
   id-token: write
@@ -62,5 +70,13 @@ jobs:
     timeout-minutes: {TIMEOUT.get(name, 15)}
     steps:
 """ + "\n".join(steps) + "\n"
-    open(os.path.join(ROOT, ".github", "workflows", f"{name}.yml"), "w").write(body)
-print(len(WF), "workflows written")
+
+
+if __name__ == "__main__":
+    d = os.path.join(ROOT, ".github", "workflows")
+    for f in os.listdir(d):
+        if f.endswith(".yml"):
+            os.remove(os.path.join(d, f))
+    for name, w in WF.items():
+        open(os.path.join(d, f"{name}.yml"), "w").write(render(name, w))
+    print(len(WF), "workflows written")

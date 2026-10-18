@@ -24,9 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { persist-credentials: false }
-      - name: Install native tools
+      - name: Install native tools (archive_convert)
+        if: inputs.operation == 'archive_convert'
         run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends 7zip >/dev/null
-      - run: command -v 7z >/dev/null || sudo ln -sf "$(command -v 7zz)" /usr/local/bin/7z
+      - if: inputs.operation != 'checksum'
+        run: command -v 7z >/dev/null || sudo ln -sf "$(command -v 7zz)" /usr/local/bin/7z
       - name: Run worker
         env:
           JOB_ID: ${{ inputs.job_id }}

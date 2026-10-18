@@ -16,8 +16,9 @@ WFS = sorted(glob.glob(os.path.join(ROOT, ".github", "workflows", "*.yml")))
 WORKERS = sorted(glob.glob(os.path.join(ROOT, "workers", "*", "index.py")))
 
 
-def test_exactly_28_one_word_workflows():
-    assert len(WFS) == 28
+def test_exactly_18_one_word_workflows_one_per_worker():
+    assert len(WFS) == 18 == len(WORKFLOWS)
+    assert all(k == v['worker'] for k, v in WORKFLOWS.items())
     for p in WFS:
         assert os.path.basename(p)[:-4].isalpha()
 
@@ -40,10 +41,10 @@ def test_workflow_valid_and_routed(path):
     env = doc["jobs"]["run"]["steps"][-1]["env"]
     assert env["WORKFLOW"] == name and env["WORKER"] == reg["worker"]
     assert os.path.exists(os.path.join(ROOT, "workers", reg["worker"], "index.py"))
-    if name != "story":
-        assert doc["on" if "on" in doc else True]["workflow_dispatch"]["inputs"]["operation"]["options"] == reg["ops"]
-    secrets = "secrets." in open(path).read()
-    assert secrets == (name == "story")  # credentials only reach the story workflow
+    assert on["workflow_dispatch"]["inputs"]["operation"]["options"] == reg["ops"]
+    text = open(path).read()
+    assert ("secrets." in text) == (name == "documents")  # AI keys only in the story-capable workflow
+    assert text.count("secrets.") == text.count("inputs.operation == 'story_generate' && secrets.")
     for step in doc["jobs"]["run"]["steps"]:
         if "uses" in step:
             assert len(step["uses"].split("@")[1]) == 40  # pinned to a commit SHA
@@ -52,6 +53,15 @@ def test_workflow_valid_and_routed(path):
 def test_registry_ops_exist_and_cover_all_runtime_ops():
     used = {op for w in WORKFLOWS.values() for op in w["ops"]}
     assert used <= set(OPERATIONS) and used == set(OPERATIONS)
+
+
+def test_every_format_routes_to_a_workflow_that_runs_its_op():
+    reg = json.load(open(os.path.join(ROOT, "registry", "formats.json")))
+    for f in reg["formats"]:
+        assert f["worker"] == f["workflow"]
+        rt = f["capabilities"]["convert_runtime"]
+        if rt:
+            assert rt["op"] in WORKFLOWS[f["workflow"]]["ops"]
 
 
 def test_format_registry_accounts_for_121_formats():

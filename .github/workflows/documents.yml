@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       job_id: { description: "VISION job id (UUID)", required: true, type: string }
-      operation: { description: "Registered operation", required: true, type: choice, options: [office_convert, checksum] }
+      operation: { description: "Registered operation", required: true, type: choice, options: [office_convert, render, story_generate, checksum] }
 
 permissions:
   contents: read
@@ -20,18 +20,25 @@ jobs:
   run:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { persist-credentials: false }
       - name: Install worker dependencies
+        if: inputs.operation != 'checksum'
         run: python3 -m pip install --quiet --break-system-packages pypdf==5.9.0
-      - name: Install native tools
+      - name: Install native tools (office_convert)
+        if: inputs.operation == 'office_convert'
         run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends libreoffice-writer >/dev/null
+      - name: Install native tools (render)
+        if: inputs.operation == 'render'
+        run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends texlive-latex-base texlive-latex-recommended texlive-fonts-recommended >/dev/null
       - name: Run worker
         env:
           JOB_ID: ${{ inputs.job_id }}
           OPERATION: ${{ inputs.operation }}
           WORKFLOW: documents
           WORKER: documents
+          NVIDIA_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.NVIDIA_API_KEY || '' }}
+          GROQ_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.GROQ_API_KEY || '' }}
         run: python3 runtime/runner.py

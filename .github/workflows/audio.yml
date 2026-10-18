@@ -24,7 +24,8 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { persist-credentials: false }
-      - name: Install native tools
+      - name: Install native tools (audio_convert)
+        if: inputs.operation == 'audio_convert'
         run: sudo apt-get update -qq && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ffmpeg >/dev/null
       - name: Run worker
         env:
