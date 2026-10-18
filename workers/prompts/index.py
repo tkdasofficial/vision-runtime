@@ -620,9 +620,8 @@ def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
 
 
 def _allowed_words(plan: dict) -> set:
-    """Proper names (characters, locations, props, clues) may appear in Latin letters inside dialogue."""
-    src = " ".join(list(plan["bible"]["characters"]) + [str(x) for x in plan.get("locations") or []]
-                   + [str(c.get("name", "")) for c in plan.get("clues") or [] if isinstance(c, dict)])
+    """Character names may appear in Latin letters inside dialogue."""
+    src = " ".join(plan["bible"]["characters"])  # only people's names; places and objects must be said in Hindi
     return {w.lower() for w in re.findall(r"[^\W\d_]{3,}", src.replace("_", " "))}
 
 
