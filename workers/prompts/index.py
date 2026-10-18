@@ -332,6 +332,8 @@ def validate_plan(plan, count: int) -> list[str]:
             t = (int(m.group(1)), int(m.group(2)) * 60 + int(m.group(3)))
             if t < last:
                 issues.append(f"Unit {i} time goes backwards")
+            elif i > 1 and (t[0] - last[0]) * 1440 + t[1] - last[1] > 180 and not beat.get("time_skip"):
+                issues.append(f"Unit {i} jumps more than 3 hours; set time_skip to the on-screen reason or keep time continuous")
             last = t
     clues = plan.get("clues")
     if count > 1:
@@ -407,19 +409,24 @@ def language_issues(text: str, spec: dict) -> list[str]:
     if spec.get("devanagari"):
         if _HYBRID.search(text):
             out.append("Hindi dialogue mixes Latin letters into Devanagari words")
-        section, outside = "", 0
+        section, outside, latin = "", 0, set()
         for line in text.splitlines():
             if re.match(r"^\s*#{1,3}\s", line):
                 section = line.lower()
             elif re.search(r"[\u0900-\u097F]{2,}", line) and "dialog" not in section:
                 outside += 1
+            elif "dialog" in section and re.search(r"[\u0900-\u097F]{2,}", line):
+                spoken = re.sub(r"\([^)]*\)|\[[^\]]*\]|^[^:\u0900-\u097F]*:", "", line)
+                latin |= {w for w in re.findall(r"[A-Za-z]{3,}", spoken)}
+        if latin:
+            out.append("English/Latin words inside Hindi dialogue (write them in Hindi, Devanagari): " + ", ".join(sorted(latin)[:6]))
         if outside > 2:
             out.append("Devanagari used outside the Dialogue section")
     return out
 
 
 EXTRACT_SYS = """Read the scene and report facts as JSON only:
-{"end_positions":{"Name":"one id from locations, or 'unknown'"},"end_props":{"prop":"holder name or one location id, or 'unknown'"},"unexplained_moves":["Name"]}
+{"start_props":{"prop":"holder or location id when the scene BEGINS, or 'unknown'"},"end_positions":{"Name":"one id from locations, or 'unknown'"},"end_props":{"prop":"holder name or one location id, or 'unknown'"},"unexplained_moves":["Name"]}
 end_* = where each listed character/prop is when the scene ENDS. unexplained_moves = characters who appear in a new place without being shown moving."""
 
 
@@ -432,7 +439,7 @@ def fact_issues(text: str, i: int, plan: dict) -> list[str]:
     try:
         got = parse_json(AUDIT_CALL([{"role": "system", "content": EXTRACT_SYS},
                                      {"role": "user", "content": json.dumps({"locations": plan.get("locations"), "characters": list(want_pos),
-                                      "props": list(want_props), "scene": text[:14000]}, ensure_ascii=False)}], 800, True))
+                                      "props": sorted(set(want_props) | set(c.get("start_props") or {})), "scene": text[:14000]}, ensure_ascii=False)}], 800, True))
     except Exception:
         return []  # extractor unavailable: not evidence of a defect
     out = []
@@ -441,6 +448,10 @@ def fact_issues(text: str, i: int, plan: dict) -> list[str]:
         g = (got.get("end_positions") or {}).get(n)
         if g and g != "unknown" and not same(g, loc):
             out.append(f"{n} must end at {loc}, scene leaves them at {g}")
+    for k, v in (c.get("start_props") or {}).items():
+        g = (got.get("start_props") or {}).get(k)
+        if g and g != "unknown" and not same(g, v):
+            out.append(f"{k} must begin with/at {v} (as the previous unit left it), scene starts it with/at {g}")
     for k, v in want_props.items():
         g = (got.get("end_props") or {}).get(k)
         if g and g != "unknown" and not same(g, v):
@@ -484,7 +495,7 @@ PLAN_SYS = SYSTEM + """ Turn the given blueprint into a compact plan. Return JSO
 "initial_state":{"entity.field":"short value"},
 "clues":[{"name":"short clue name","setup":1,"payoff":10}],
 "outline":[{"index":1,"moment":"what happens","time":"D1 22:00","location":"location id","end_positions":{"Name":"location id at unit end (EVERY character)"},"end_props":{"prop name":"holder or location id at unit end (EVERY tracked prop)"},"characters":["Name"],"props_in_play":["prop: who holds it / where"],"injuries":["Name: injury (cause, unit)"],"clues_planted":["clue name"],"clues_paid":["clue name"],"before":{"entity.field":"value"},"after":{"entity.field":"new short value"}}]}
-Exactly N outline items. time is 'D<day> HH:MM' and never goes backwards. A character's start position is their previous end position; anyone who moves must be shown moving.
+Exactly N outline items. time is 'D<day> HH:MM' and never goes backwards; a gap over 3 hours needs "time_skip":"reason shown on screen". Destroyed props stay destroyed (value 'destroyed'). A character's start position is their previous end position; anyone who moves must be shown moving.
 Times never go backwards and gaps are explained. Every prop or injury exists only from the unit that causes it;
 a dropped/lost prop stays dropped until a unit recovers it. Every clue planted is paid off in a later unit (final unit resolves the mystery). Each unit advances one causal step; every 'before' equals the state left by earlier units.
 Track props' locations, injuries, knowledge and clues as state keys. Values are 1-4 word phrases. Seed clues early and pay them off at the end."""

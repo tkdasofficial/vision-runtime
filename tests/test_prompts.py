@@ -81,3 +81,7 @@ def test_fact_ledger_compared_by_code(monkeypatch):
     monkeypatch.setattr(P, "AUDIT_CALL", lambda *a, **k: '{"end_positions":{"Mira":"basement"},"end_props":{"knife":"Mira"},"unexplained_moves":[]}')
     out = P.fact_issues("text", 1, p)
     assert len(out) == 1 and "basement" in out[0]
+
+def test_latin_in_dialogue_flagged():
+    assert P.language_issues("## Dialogue (Hindi)\nप्रिया (whispering): यह lock खुल गया", {"devanagari": True})
+    assert P.language_issues("## Dialogue (Hindi)\nPriya (whispering): यह ताला खुल गया", {"devanagari": True}) == []
