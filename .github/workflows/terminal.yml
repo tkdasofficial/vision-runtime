@@ -1,12 +1,12 @@
-name: run-job
-# Runs exactly one registered VISION operation. Dispatched only by the VISION backend.
+name: terminal
+# Terminal tasks: runs exactly one registered non-story VISION operation. Dispatched only by the VISION backend.
 # Inputs carry no secrets and no file data: the runner proves its identity to the relay
 # with GitHub OIDC and pulls its (integrity-checked) input from there.
 on:
   workflow_dispatch:
     inputs:
       job_id: { description: "VISION job id (UUID)", required: true, type: string }
-      operation: { description: "Registered operation", required: true, type: choice, options: [checksum, image_convert, video_convert, audio_convert, office_convert, data_convert, archive_convert, ebook_convert, font_convert, render, story_generate] }
+      operation: { description: "Registered operation", required: true, type: choice, options: [checksum, image_convert, video_convert, audio_convert, office_convert, data_convert, archive_convert, ebook_convert, font_convert, render] }
 
 permissions:
   contents: read
@@ -46,6 +46,4 @@ jobs:
         env:
           JOB_ID: ${{ inputs.job_id }}
           OPERATION: ${{ inputs.operation }}
-          NVIDIA_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.NVIDIA_API_KEY || '' }}
-          GROQ_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.GROQ_API_KEY || '' }}
         run: python3 runtime/runner.py

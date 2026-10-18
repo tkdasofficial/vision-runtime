@@ -1,6 +1,6 @@
 # Vision-Runtime
 
-Background execution runtime for VISION. The VISION backend dispatches `run-job.yml`
+Background execution runtime for VISION. The VISION backend dispatches `.github/workflows/terminal.yml` (file operations) or `.github/workflows/story.yml` (stories, code in `workers/story/index.py`)
 with only a job id and an operation name; the runner then:
 
 1. Gets a GitHub OIDC token (audience `vision-runtime-relay`).
@@ -32,4 +32,4 @@ monthly quota. VISION caps concurrent jobs per user and overall, and never auto-
 
 ## Tests
 
-`python3 -m pytest -q tests` (runs on every push via `runtime-tests.yml`).
+`python3 -m pytest -q tests` (run locally; no workflow runs automatically).

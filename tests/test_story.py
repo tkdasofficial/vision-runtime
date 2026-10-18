@@ -4,7 +4,7 @@ import sys
 import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from runtime import story  # noqa: E402
+from workers.story import index as story  # noqa: E402
 from runtime.operations import OpError, get  # noqa: E402
 
 PROMPT = "Generate exactly 3 detailed, sequential scene-generation prompts for a horror story. Include Scene Title, Character Details, Visual Prompt, Dialogue, Sound Design, Camera Direction, Scene Actions, Continuity Details, Negative Constraints, Ending and Transition in every scene."
@@ -22,7 +22,7 @@ def review():
 
 
 # Mirror the public review categories without relying on model prose.
-from runtime.story_quality import CATEGORIES
+from workers.story.index import CATEGORIES
 
 
 def fake_call(messages, max_tokens):
@@ -127,14 +127,14 @@ def test_wrong_scene_number_does_not_pass():
 
 
 def test_plan_boundary_contradiction():
-    from runtime.story_quality import validate_plan
+    from workers.story.index import validate_plan
     p = plan()
     p['outline'][1]['before']['Ari.possession'] = 'no lantern'
     assert any('precondition' in i for i in validate_plan(p, 3))
 
 
 def test_empty_evidence_never_commits_state():
-    from runtime.story_quality import validate_review
+    from workers.story.index import validate_review
     r = review()
     r['changes'] = [{'key': 'Ari.possession', 'from': 'lantern', 'to': 'lost', 'evidence': ''}]
     problems, candidate = validate_review(r, 'Ari walks.', {'Ari.possession': 'lantern'})
