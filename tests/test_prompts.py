@@ -9,7 +9,7 @@ BIBLE = {"characters": {"Mira": "a 30-year-old woman with a silver bob, green ey
 SPEC = {"count": 3, "noun": "prompt", "multi": True, "sections": P.DEFAULT_SECTIONS, "devanagari": False, "story": False}
 def plan(n):
     return {"blueprint": "b" * 300, "bible": BIBLE, "initial_state": {"mira.umbrella": "closed"},
-            "clues": [{"name": "silver key", "setup": 1, "payoff": n}],
+            "clues": [{"name": "brass lantern", "setup": 1, "payoff": n}],
             "outline": [{"index": i, "moment": f"m{i}", "time": f"0{i}:00", "location": "street", "characters": ["Mira"], "before": {}, "after": {}} for i in range(1, n + 1)]}
 def unit(i, desc=BIBLE["characters"]["Mira"], extra=""):
     body = "\n".join(f"## {f}\n{f} details" for f in P.DEFAULT_SECTIONS)
@@ -37,8 +37,8 @@ def test_locks_and_clues_verbatim():
     assert P.check_prompt if False else True
     assert P.check_unit(unit(2), 2, p, SPEC) == []
     assert any("Mira" in x for x in P.check_unit(unit(2, "a woman with black hair"), 2, p, SPEC))
-    assert any("silver key" in x for x in P.check_unit(unit(3), 3, p, SPEC))
-    assert P.check_unit(unit(3, extra="the silver key"), 3, p, SPEC) == []
+    assert any("brass lantern" in x for x in P.check_unit(unit(3), 3, p, SPEC))
+    assert P.check_unit(unit(3, extra="the brass lantern"), 3, p, SPEC) == []
 
 def test_story_only_when_asked_and_fences():
     assert P.wants_story("Write a story with 5 scene prompts")

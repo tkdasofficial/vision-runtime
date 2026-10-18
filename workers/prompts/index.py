@@ -31,7 +31,7 @@ MAX_BRIEF_CHARS = 60_000
 REPAIR_ROUNDS = 2
 PARALLEL = 10
 MIN_SCORE = 90
-CALL_TIMEOUT_S = 180
+CALL_TIMEOUT_S = 240
 DEFAULT_SECTIONS = ["Subject", "Characters", "Setting", "Action", "Camera", "Lighting", "Style", "Negative"]
 CATEGORIES = ("identity", "style", "continuity", "instructions", "structure")
 
@@ -115,9 +115,13 @@ def auditor_call(messages, max_tokens, json_mode=False):
     saved = os.environ.pop("NVIDIA_API_KEY", None) if os.environ.get("GROQ_API_KEY") else None
     try:
         return provider_call(messages, max_tokens, json_mode)
+    except OpError:
+        if saved is None:
+            raise
     finally:
         if saved is not None:
             os.environ["NVIDIA_API_KEY"] = saved
+    return provider_call(messages, max_tokens, json_mode)  # auditor unavailable/too small: fall back, still a separate pass
 
 
 AUDIT_CALL: Callable[..., str] = auditor_call
@@ -324,6 +328,7 @@ def _norm(s: str) -> str:
 
 def _mentions(name: str, low: str) -> bool:
     """A clue counts as named when most of its significant words appear (handles inflection and transliteration)."""
+    name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
     words = [w for w in re.findall(r"[\w']+", _norm(name)) if len(w) > 3] or re.findall(r"[\w']+", _norm(name))
     return sum(w[:5] in low for w in words) >= max(1, round(len(words) * 0.6))
 
@@ -385,7 +390,7 @@ def deterministic_score(units: list[str], plan: dict, spec: dict) -> int:
 
 # ---------- prompts ----------
 
-BLUEPRINT_SYS = SYSTEM + """ Write ONLY the Master Story Blueprint in Markdown: plot, characters with exact physical appearance and clothing,
+BLUEPRINT_SYS = SYSTEM + """ Write ONLY a dense Master Story Blueprint in Markdown (under 1,800 words, bullet points): plot, characters with exact physical appearance and clothing,
 locations, supernatural/world rules, important props, timeline, mysteries, recurring clues and their payoffs, ending. No scene scripts."""
 
 PLAN_SYS = SYSTEM + """ Turn the given blueprint into a compact plan. Return JSON only (no Markdown inside):
@@ -507,7 +512,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         say("planning")
         problems: list[str] = []
         blueprint = _ai([{"role": "system", "content": BLUEPRINT_SYS},
-                         {"role": "user", "content": json.dumps({"brief": brief, "N": count}, ensure_ascii=False)}], 6000)
+                         {"role": "user", "content": json.dumps({"brief": brief, "N": count}, ensure_ascii=False)}], 3500)
         story = ""
         if spec["story"]:
             story = _ai([{"role": "system", "content": SYSTEM + " Write ONLY the complete story prose that this blueprint describes."},
@@ -561,16 +566,28 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         if spec["multi"]:
             say("validating_output")
             for round_ in range(1 + REPAIR_ROUNDS):
-                doc = "\n\n---\n\n".join(series)
-                try:
-                    audit = parse_json(AUDIT_CALL([{"role": "system", "content": AUDIT_SYS},
-                                            {"role": "user", "content": json.dumps({"brief": brief[:6000], "bible": plan["bible"], "outline": plan["outline"], "clues": plan.get("clues"), "series": doc}, ensure_ascii=False)}], 4000, True))
-                    audit_score = int(audit.get("score", 0))
-                except (ValueError, TypeError):
-                    audit, audit_score = {"issues": ["Audit unparsable"], "units": []}, 0
+                # Windowed audit (4 consecutive units, overlapping by 1) keeps each request inside provider limits;
+                # the series score is the weakest window.
+                scores, notes_all, flagged = [], [], set()
+                for start in range(0, count, 3):
+                    idx = list(range(start + 1, min(start + 5, count + 1)))
+                    window = "\n\n---\n\n".join(series[i - 1] for i in idx)
+                    try:
+                        a_ = parse_json(AUDIT_CALL([{"role": "system", "content": AUDIT_SYS},
+                                                    {"role": "user", "content": json.dumps({"units": idx, "bible": plan["bible"], "clues": plan.get("clues"),
+                                                     "outline": [plan["outline"][i - 1] for i in idx], "series": window}, ensure_ascii=False)}], 2500, True))
+                        scores.append(int(a_.get("score", 0)))
+                        notes_all += [x for x in a_.get("issues", []) if isinstance(x, str)]
+                        flagged |= {i for i in a_.get("units", []) if isinstance(i, int) and i in idx}
+                    except (ValueError, TypeError, OpError):
+                        scores.append(0)
+                    if start + 4 >= count:
+                        break
+                audit_score = min(scores) if scores else 0
+                audit = {"issues": notes_all, "units": sorted(flagged)}
+                print(f"[prompts] audit scores={scores} flagged={sorted(flagged)}", flush=True)
                 if audit_score >= MIN_SCORE:
                     break
-                notes_all = [x for x in audit.get("issues", []) if isinstance(x, str)]
                 fix = sorted({i for i in audit.get("units", []) if isinstance(i, int) and 1 <= i <= count}
                              | {int(n) for x in notes_all for n in re.findall(r"unit (\d+)", x, re.I) if 1 <= int(n) <= count})
                 if not fix or round_ == REPAIR_ROUNDS:
