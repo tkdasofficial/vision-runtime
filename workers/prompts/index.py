@@ -90,7 +90,9 @@ def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False
                         wait = float(e.headers.get("retry-after") or 0)
                     except (TypeError, ValueError):
                         wait = 0
-                    time.sleep(min(max(wait, 5 * (attempt + 1)), 30))
+                    if attempt or len(providers) > 1 and (url, key, model) != providers[-1]:
+                        break  # rate limited: move to the other provider instead of waiting
+                    time.sleep(min(max(wait, 5), 15))
                     continue
                 if e.code < 500:
                     break
@@ -218,6 +220,18 @@ def normalize_plan(plan, count: int):
         plan["blueprint"] = json.dumps(plan["blueprint"], ensure_ascii=False, indent=1)
     if not isinstance(plan.get("outline"), list):
         return plan
+    names = list((plan.get("bible") or {}).get("characters") or {})
+
+    def resolve(n):
+        n = str(n).strip().lower()
+        for k in names:
+            kl = k.lower()
+            if n == kl or n.split()[0] == kl.split()[0] or n in kl or kl in n:
+                return k
+        return None
+    for beat in plan["outline"]:
+        if isinstance(beat, dict) and isinstance(beat.get("characters"), list):
+            beat["characters"] = list(dict.fromkeys(r for r in map(resolve, beat["characters"]) if r))
     state = {k: str(v) for k, v in (plan.get("initial_state") or {}).items()} if isinstance(plan.get("initial_state"), dict) else {}
     plan["initial_state"] = dict(state)
     for i, beat in enumerate(plan["outline"], 1):

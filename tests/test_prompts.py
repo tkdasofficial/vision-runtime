@@ -56,3 +56,7 @@ def test_plan_shapes_are_normalized():
     assert q["bible"]["negative"] == "no text, no watermark"
     assert q["outline"][1]["before"] == {"mira.umbrella": "closed"}
     assert P.validate_plan(q, 3) == []
+
+def test_cast_names_resolve_to_bible():
+    p = plan(3); p["outline"][0]["characters"] = ["mira", "Ghost extra"]
+    assert P.normalize_plan(p, 3)["outline"][0]["characters"] == ["Mira"]
