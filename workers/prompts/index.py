@@ -58,7 +58,10 @@ def _post(url: str, key: str, payload: dict) -> str:
 
 def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False) -> str:
     """NVIDIA first, Groq fallback; one bounded retry per provider on transient errors only."""
-    providers = [(u, os.environ[k], m) for u, k, m in ((NVIDIA_URL, "NVIDIA_API_KEY", NVIDIA_MODEL), (GROQ_URL, "GROQ_API_KEY", GROQ_MODEL)) if os.environ.get(k)]
+    order = ((NVIDIA_URL, "NVIDIA_API_KEY", NVIDIA_MODEL), (GROQ_URL, "GROQ_API_KEY", GROQ_MODEL))
+    if json_mode:  # structured steps (plan, reviews, audits) go to the stronger, faster JSON follower first
+        order = order[::-1]
+    providers = [(u, os.environ[k], m) for u, k, m in order if os.environ.get(k)]
     if not providers:
         raise OpError("No AI provider key is configured on the runner.")
     last = "no provider succeeded"
@@ -352,10 +355,11 @@ def deterministic_score(units: list[str], plan: dict, spec: dict) -> int:
 
 # ---------- prompts ----------
 
-PLAN_SYS = SYSTEM + """ Plan before writing. Return JSON only:
-{"story":"ONLY when the brief asks for the story itself: the complete story prose, else empty string",
-"blueprint":"complete Master Story Blueprint in Markdown (plot, characters, appearances, clothing, locations, rules, props, timeline, mysteries, clues, ending)",
-"bible":{"characters":{"Name":"locked visual descriptor, 20-40 words: age, face, hair, build, exact clothing"},"style":"ONE locked cinematic style line","negative":"ONE locked negative-constraints line"},
+BLUEPRINT_SYS = SYSTEM + """ Write ONLY the Master Story Blueprint in Markdown: plot, characters with exact physical appearance and clothing,
+locations, supernatural/world rules, important props, timeline, mysteries, recurring clues and their payoffs, ending. No scene scripts."""
+
+PLAN_SYS = SYSTEM + """ Turn the given blueprint into a compact plan. Return JSON only (no Markdown inside):
+{"bible":{"characters":{"Name":"locked visual descriptor, 20-40 words: age, face, hair, build, exact clothing"},"style":"ONE locked cinematic style line","negative":"ONE locked negative-constraints line"},
 "initial_state":{"entity.field":"short value"},
 "clues":[{"name":"short clue name","setup":1,"payoff":10}],
 "outline":[{"index":1,"moment":"what happens","time":"HH:MM","location":"place","characters":["Name"],"props_in_play":["prop: who holds it / where"],"injuries":["Name: injury (cause, unit)"],"clues_planted":["clue name"],"clues_paid":["clue name"],"before":{"entity.field":"value"},"after":{"entity.field":"new short value"}}]}
@@ -443,10 +447,18 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
     if not ck["plan"]:
         say("planning")
         problems: list[str] = []
+        blueprint = _ai([{"role": "system", "content": BLUEPRINT_SYS},
+                         {"role": "user", "content": json.dumps({"brief": brief, "N": count}, ensure_ascii=False)}], 6000)
+        story = ""
+        if spec["story"]:
+            story = _ai([{"role": "system", "content": SYSTEM + " Write ONLY the complete story prose that this blueprint describes."},
+                         {"role": "user", "content": blueprint}], 8000)
         for _ in range(3):
             try:
                 plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS},
-                                       {"role": "user", "content": json.dumps({"brief": brief, "N": count, "repair": problems}, ensure_ascii=False)}], 12000, True))
+                                       {"role": "user", "content": json.dumps({"brief": brief[:6000], "blueprint": blueprint, "N": count, "repair": problems}, ensure_ascii=False)}], 8000, True))
+                if isinstance(plan, dict):
+                    plan["blueprint"], plan["story"] = blueprint, story
                 plan = normalize_plan(plan, count)
                 problems = validate_plan(plan, count)
             except (ValueError, TypeError):
