@@ -78,8 +78,8 @@ def test_language_rules():
 
 def test_fact_ledger_compared_by_code(monkeypatch):
     p = plan(2); p["outline"][0]["end_positions"] = {"Mira": "foyer"}; p["outline"][0]["end_props"] = {"knife": "Mira"}
-    monkeypatch.setattr(P, "AUDIT_CALL", lambda *a, **k: '{"end_positions":{"Mira":"basement"},"end_props":{"knife":"Mira"},"unexplained_moves":[]}')
-    out = P.fact_issues("text", 1, p)
+    monkeypatch.setattr(P, "AUDIT_CALL", lambda *a, **k: '{"evidence":{"knife":"Mira grabs the knife from the table"},"end_positions":{"Mira":"basement"},"end_props":{"knife":"Mira"},"unexplained_moves":[]}')
+    out = P.fact_issues("Mira grabs the knife from the table here", 1, p)
     assert len(out) == 1 and "basement" in out[0]
 
 def test_latin_in_dialogue_flagged():
@@ -115,3 +115,13 @@ def test_names_allowed_and_dialogue_only_fix(monkeypatch):
     monkeypatch.setattr(P, "CALL", lambda *a, **k: "## Dialogue\nमीरा: यह ताला है")
     out = P._fix_dialogue(t, ["lock"])
     assert "ताला" in out and "## Camera\nwide" in out and "lock" not in out
+
+def test_other_scripts_flagged():
+    assert P.language_issues("## Dialogue\nमीरा: তোমার শান্তি হোক", {"devanagari": True})
+
+def test_prop_move_needs_quoted_evidence(monkeypatch):
+    p = plan(2); b = p["outline"][0]; b["start_props"] = {"bell": "nail"}; b["end_props"] = {"bell": "Mira"}; b["end_positions"] = {}
+    monkeypatch.setattr(P, "AUDIT_CALL", lambda *a, **k: '{"evidence":{"bell":""},"end_props":{"bell":"Mira"},"start_props":{"bell":"nail"}}')
+    assert any("show bell" in x for x in P.fact_issues("Mira looks at the bell.", 1, p))
+    monkeypatch.setattr(P, "AUDIT_CALL", lambda *a, **k: '{"evidence":{"bell":"Mira lifts the bell off the nail"},"end_props":{"bell":"Mira"},"start_props":{"bell":"nail"}}')
+    assert P.fact_issues("Mira lifts the bell off the nail and pockets it.", 1, p) == []

@@ -431,9 +431,12 @@ _HYBRID = re.compile(r"[\u0900-\u097F]+[-\u2011]?[A-Za-z]+|[A-Za-z]+[-\u2011]?[\
 def language_issues(text: str, spec: dict, allowed: set | None = None) -> list[str]:
     """Deterministic: no accented foreign Latin words; no Devanagari/Latin hybrids; Devanagari only in dialogue."""
     out = []
-    bad = {w for w in _FOREIGN.findall(text) if w.lower() not in ("café", "naïve") and w.lower() not in (allowed or set())}
+    bad = {w for w in _FOREIGN.findall(text) if w.lower() not in ("café", "naïve", "fiancée", "fiancé", "façade", "cliché", "décor", "résumé", "protégé", "déjà", "vu", "sautéed", "crème", "entrée", "élan", "rôle", "über") and w.lower() not in (allowed or set())}
     if bad:
         out.append("foreign-language words: " + ", ".join(sorted(bad)[:5]))
+    other = re.findall(r"[\u0980-\u0DFF\u0600-\u06FF\u4E00-\u9FFF\u0400-\u04FF]+", text)
+    if other:
+        out.append("text in a script other than English/Devanagari (e.g. Bengali): " + " ".join(other[:3]))
     if spec.get("devanagari"):
         if _HYBRID.search(text):
             out.append("Hindi dialogue mixes Latin letters into Devanagari words")
@@ -454,7 +457,7 @@ def language_issues(text: str, spec: dict, allowed: set | None = None) -> list[s
 
 
 EXTRACT_SYS = """Read the scene and report facts as JSON only:
-{"start_props":{"prop":"holder or location id when the scene BEGINS, or 'unknown'"},"end_positions":{"Name":"one id from locations, or 'unknown'"},"end_props":{"prop":"holder name or one location id, or 'unknown'"},"unexplained_moves":["Name"]}
+{"evidence":{"prop":"exact sentence copied from the scene that shows the prop reaching its end holder/location; empty string if no sentence shows it"},"start_props":{"prop":"holder or location id when the scene BEGINS, or 'unknown'"},"end_positions":{"Name":"one id from locations, or 'unknown'"},"end_props":{"prop":"holder name or one location id, or 'unknown'"},"unexplained_moves":["Name"]}
 end_* = where each listed character/prop is when the scene ENDS. unexplained_moves = characters who appear in a new place without being shown moving."""
 
 
@@ -484,6 +487,14 @@ def fact_issues(text: str, i: int, plan: dict) -> list[str]:
         g = (got.get("end_props") or {}).get(k)
         if g and g != "unknown" and not same(g, v):
             out.append(f"{k} must end with/at {v}, scene shows {g}")
+    ev = got.get("evidence") if isinstance(got.get("evidence"), dict) else {}
+    low = _norm(text)
+    for k, v in want_props.items():
+        if v == (c.get("start_props") or {}).get(k):
+            continue  # unchanged this unit: nothing to show
+        q = ev.get(k)
+        if not (isinstance(q, str) and len(q) > 15 and _norm(q)[:60] in low):
+            out.append(f"Scene Actions must show {k} reaching {v} on screen (no sentence shows it)")
     for n in got.get("unexplained_moves") or []:
         if isinstance(n, str):
             out.append(f"{n} changes place without being shown moving")
@@ -691,6 +702,8 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         problems: list[str] = []
         blueprint = _ai([{"role": "system", "content": BLUEPRINT_SYS},
                          {"role": "user", "content": json.dumps({"brief": brief, "N": count}, ensure_ascii=False)}], 3500)
+        if spec["devanagari"]:  # the blueprint is all-English: strip stray non-Latin script deterministically
+            blueprint = re.sub(r"[\u0900-\u0DFF]+[^\n]*?(?=[.;\n]|$)", "", blueprint)
         story = ""
         if spec["story"]:
             story = _ai([{"role": "system", "content": SYSTEM + " Write ONLY the complete story prose that this blueprint describes."},
