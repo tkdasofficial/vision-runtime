@@ -175,6 +175,27 @@ def normalize_plan(plan, count: int):
     'before' maps are recomputed from the running state, string indexes become ints, clue units are coerced."""
     if not isinstance(plan, dict) or not isinstance(plan.get("outline"), list):
         return plan
+
+    def flat(v):
+        if isinstance(v, str):
+            return v.strip()
+        if isinstance(v, list):
+            return ", ".join(flat(x) for x in v if flat(x))
+        if isinstance(v, dict):
+            return ", ".join(flat(x) for k, x in v.items() if k.lower() not in ("name", "role") and flat(x))
+        return str(v) if v is not None else ""
+    bible = plan.get("bible") if isinstance(plan.get("bible"), dict) else {}
+    chars = bible.get("characters")
+    if isinstance(chars, list):  # [{"name": "...", "descriptor": ...}] -> {"name": "descriptor"}
+        chars = {str(c.get("name")): c for c in chars if isinstance(c, dict) and c.get("name")}
+    if isinstance(chars, dict):
+        bible["characters"] = {str(k): flat(v) for k, v in chars.items() if flat(v)}
+    for key in ("style", "negative"):
+        if key in bible and not isinstance(bible[key], str):
+            bible[key] = flat(bible[key])
+    plan["bible"] = bible
+    if not isinstance(plan.get("blueprint"), str) and plan.get("blueprint") is not None:
+        plan["blueprint"] = json.dumps(plan["blueprint"], ensure_ascii=False, indent=1)
     state = {k: str(v) for k, v in (plan.get("initial_state") or {}).items()} if isinstance(plan.get("initial_state"), dict) else {}
     plan["initial_state"] = dict(state)
     for i, beat in enumerate(plan["outline"], 1):
@@ -412,7 +433,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                 problems = validate_plan(plan, count)
             except (ValueError, TypeError):
                 problems = ["Invalid planning JSON"]
-            print(f"[prompts] plan attempt problems={len(problems)} first={problems[0][:60] if problems else ''}", flush=True)
+            print(f"[prompts] plan attempt problems={len(problems)} first={problems[0][:60] if problems else ''} shape={type((plan.get('bible') or {}).get('characters')).__name__ if isinstance(plan, dict) else '-'}", flush=True)
             if not problems:
                 ck["plan"] = plan; save(); break
         if not ck["plan"]:

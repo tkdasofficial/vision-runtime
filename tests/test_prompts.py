@@ -45,3 +45,14 @@ def test_story_only_when_asked_and_fences():
     assert not P.wants_story("Generate 10 scene prompts. Do not generate the finished story itself.")
     f = P.fence("# Scene 1\n```x```\nhi")
     assert f.startswith("````markdown\n") and f.endswith("\n````")
+
+def test_plan_shapes_are_normalized():
+    p = plan(3)
+    p["bible"]["characters"] = [{"name": "Mira", "age": "30", "outfit": ["red coat", "boots"]}]
+    p["bible"]["negative"] = ["no text", "no watermark"]
+    p["outline"][1]["before"] = {"mira.umbrella": "wrong"}
+    q = P.normalize_plan(p, 3)
+    assert q["bible"]["characters"] == {"Mira": "30, red coat, boots"}
+    assert q["bible"]["negative"] == "no text, no watermark"
+    assert q["outline"][1]["before"] == {"mira.umbrella": "closed"}
+    assert P.validate_plan(q, 3) == []
