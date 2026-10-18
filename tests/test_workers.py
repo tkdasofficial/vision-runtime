@@ -16,15 +16,18 @@ WFS = sorted(glob.glob(os.path.join(ROOT, ".github", "workflows", "*.yml")))
 WORKERS = sorted(glob.glob(os.path.join(ROOT, "workers", "*", "index.py")))
 
 
-def test_exactly_18_one_word_workflows_one_per_worker():
-    assert len(WFS) == 18 == len(WORKFLOWS)
-    assert all(k == v['worker'] for k, v in WORKFLOWS.items())
+ALIASES = {"terminal": "logs"}  # terminal.yml is a manual checksum entry point on the logs worker
+
+
+def test_one_word_workflows_route_to_workers():
+    assert len(WFS) == 20 == len(WORKFLOWS)
+    assert all(v["worker"] == ALIASES.get(k, k) for k, v in WORKFLOWS.items())
     for p in WFS:
         assert os.path.basename(p)[:-4].isalpha()
 
 
-def test_exactly_18_workers_load():
-    assert len(WORKERS) == 18
+def test_exactly_19_workers_load():
+    assert len(WORKERS) == 19
     for p in WORKERS:
         name = p.split(os.sep)[-2]
         mod = importlib.import_module(f"workers.{name}.index")
@@ -43,8 +46,8 @@ def test_workflow_valid_and_routed(path):
     assert os.path.exists(os.path.join(ROOT, "workers", reg["worker"], "index.py"))
     assert on["workflow_dispatch"]["inputs"]["operation"]["options"] == reg["ops"]
     text = open(path).read()
-    assert ("secrets." in text) == (name == "documents")  # AI keys only in the story-capable workflow
-    assert text.count("secrets.") == text.count("inputs.operation == 'story_generate' && secrets.")
+    assert ("secrets." in text) == (name in ("documents", "prompts"))  # AI keys only in story/prompt workflows
+    assert text.count("secrets.") == text.count("inputs.operation == 'story_generate' && secrets.") + text.count("inputs.operation == 'prompt_generate' && secrets.")
     for step in doc["jobs"]["run"]["steps"]:
         if "uses" in step:
             assert len(step["uses"].split("@")[1]) == 40  # pinned to a commit SHA

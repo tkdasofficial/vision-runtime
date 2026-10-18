@@ -190,6 +190,11 @@ def op_video_convert(inp, params, workdir):
 
 from runtime import format_ops as F  # noqa: E402
 
+def _prompts(inp, params, workdir):
+    from workers.prompts.index import run_prompts
+    return run_prompts(params, workdir, params.get("_progress"))
+
+
 def _story(inp, params, workdir):
     from workers.documents.story import run_story
     return run_story(params, workdir, params.get("_progress"))
@@ -204,6 +209,7 @@ OPERATIONS: dict[str, Operation] = {
     "font_convert": Operation("font_convert", True, 25 * MB, 30 * MB, 300, F.op_font_convert),
     "render": Operation("render", True, 5 * MB, 30 * MB, 600, F.op_render),
     "checksum": Operation("checksum", True, 25 * MB, 0, 300, op_checksum),
+    "prompt_generate": Operation("prompt_generate", False, 0, 5 * MB, 1500, _prompts),
     "story_generate": Operation("story_generate", False, 0, 5 * MB, 1500, _story),
     "image_convert": Operation("image_convert", True, 25 * MB, 60 * MB, 300, op_image_convert),
     "video_convert": Operation("video_convert", True, 25 * MB, 100 * MB, 1500, op_video_convert),
