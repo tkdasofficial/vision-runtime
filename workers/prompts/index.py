@@ -328,7 +328,7 @@ def _norm(s: str) -> str:
 
 def _mentions(name: str, low: str) -> bool:
     """A clue counts as named when most of its significant words appear (handles inflection and transliteration)."""
-    name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name)
+    name = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", name).replace("_", " ").replace("-", " ")
     words = [w for w in re.findall(r"[\w']+", _norm(name)) if len(w) > 3] or re.findall(r"[\w']+", _norm(name))
     return sum(w[:5] in low for w in words) >= max(1, round(len(words) * 0.6))
 
@@ -583,7 +583,10 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                     try:
                         a_ = parse_json(AUDIT_CALL([{"role": "system", "content": AUDIT_SYS},
                                                     {"role": "user", "content": json.dumps({"units": idx, "bible": plan["bible"], "clues": plan.get("clues"),
-                                                     "outline": [plan["outline"][i - 1] for i in idx], "series": window}, ensure_ascii=False)}], 2500, True))
+                                                     "full_outline": [{"index": o["index"], "moment": o["moment"], "time": o.get("time"), "location": o.get("location"), "after": o.get("after")} for o in plan["outline"]],
+                                                     "contracts_for_these_units": [plan["outline"][i - 1] for i in idx],
+                                                     "note": "Events from units outside this window happened as the full_outline says; judge these units against it.",
+                                                     "series": window}, ensure_ascii=False)}], 2500, True))
                         scores.append(int(a_.get("score", 0)))
                         notes_all += [x for x in a_.get("issues", []) if isinstance(x, str)]
                         flagged |= {i for i in a_.get("units", []) if isinstance(i, int) and i in idx}
