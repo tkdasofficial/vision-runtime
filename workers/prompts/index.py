@@ -331,7 +331,10 @@ def validate_plan(plan, count: int) -> list[str]:
         if m:
             t = (int(m.group(1)), int(m.group(2)) * 60 + int(m.group(3)))
             if t < last:
-                issues.append(f"Unit {i} time goes backwards")
+                # deterministic repair: a midnight crossing moves to the next day; otherwise continue 10 minutes later
+                t = (last[0] + 1, t[1]) if t[0] == last[0] and t[1] < 6 * 60 and last[1] >= 18 * 60 else (last[0], last[1] + 10)
+                t = (t[0] + t[1] // 1440, t[1] % 1440)
+                beat["time"] = f"D{t[0]} {t[1] // 60:02d}:{t[1] % 60:02d}"
             elif i > 1 and (t[0] - last[0]) * 1440 + t[1] - last[1] > 180 and not beat.get("time_skip"):
                 # deterministic repair: the writer must show the elapsed time on screen
                 gap = ((t[0] - last[0]) * 1440 + t[1] - last[1]) // 60

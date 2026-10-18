@@ -90,3 +90,8 @@ def test_long_gap_gets_time_skip():
     p = plan(2); p["outline"][1]["time"] = "D2 05:00"
     P.validate_plan(p, 2) if hasattr(P, "validate_plan") else None
     assert "hours pass" in p["outline"][1].get("time_skip", "")
+
+def test_backwards_time_is_repaired():
+    p = plan(3); p["outline"][1]["time"] = "D1 23:50"; p["outline"][2]["time"] = "D1 00:20"
+    assert not [i for i in P.validate_plan(p, 3) if "time" in i]
+    assert p["outline"][2]["time"] == "D2 00:20"
