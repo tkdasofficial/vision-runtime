@@ -428,10 +428,10 @@ _FOREIGN = re.compile(r"[A-Za-z]*[\u00C0-\u024F]+[A-Za-z]*")
 _HYBRID = re.compile(r"[\u0900-\u097F]+[-\u2011]?[A-Za-z]+|[A-Za-z]+[-\u2011]?[\u0900-\u097F]+")
 
 
-def language_issues(text: str, spec: dict) -> list[str]:
+def language_issues(text: str, spec: dict, allowed: set | None = None) -> list[str]:
     """Deterministic: no accented foreign Latin words; no Devanagari/Latin hybrids; Devanagari only in dialogue."""
     out = []
-    bad = {w for w in _FOREIGN.findall(text) if w.lower() not in ("café", "naïve")}
+    bad = {w for w in _FOREIGN.findall(text) if w.lower() not in ("café", "naïve") and w.lower() not in (allowed or set())}
     if bad:
         out.append("foreign-language words: " + ", ".join(sorted(bad)[:5]))
     if spec.get("devanagari"):
@@ -445,7 +445,7 @@ def language_issues(text: str, spec: dict) -> list[str]:
                 outside += 1
             elif "dialog" in section and re.search(r"[\u0900-\u097F]{2,}", line):
                 spoken = re.sub(r"\([^)]*\)|\[[^\]]*\]|^[^:\u0900-\u097F]*:", "", line)
-                latin |= {w for w in re.findall(r"[A-Za-z]{3,}", spoken)}
+                latin |= {w for w in re.findall(r"[A-Za-z]{3,}", spoken) if w.lower() not in (allowed or set())}
         if latin:
             out.append("English/Latin words inside Hindi dialogue (write them in Hindi, Devanagari): " + ", ".join(sorted(latin)[:6]))
         if outside > 2:
@@ -506,7 +506,7 @@ def deterministic_score(units: list[str], plan: dict, spec: dict) -> int:
     for i, text in enumerate(units, 1):
         n_checks = len(spec["sections"]) + 2 + len(plan["outline"][i - 1].get("characters", [])) + len(plan["outline"][i - 1].get("after") or {}) + 2
         total += n_checks
-        passed += max(0, n_checks - len(check_unit(text, i, plan, spec)) - len(language_issues(text, spec)))
+        passed += max(0, n_checks - len(check_unit(text, i, plan, spec)) - len(language_issues(text, spec, _allowed_words(plan))))
     return round(100 * passed / total) if total else 0
 
 
@@ -608,13 +608,46 @@ def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
     return text
 
 
+def _allowed_words(plan: dict) -> set:
+    """Proper names (characters, locations, props, clues) may appear in Latin letters inside dialogue."""
+    src = " ".join(list(plan["bible"]["characters"]) + [str(x) for x in plan.get("locations") or []]
+                   + [str(c.get("name", "")) for c in plan.get("clues") or [] if isinstance(c, dict)])
+    return {w.lower() for w in re.findall(r"[^\W\d_]{3,}", src.replace("_", " "))}
+
+
+DIALOGUE_FIX_SYS = ("Rewrite ONLY this Dialogue section. Spoken words must be pure natural Hindi in Devanagari: replace every English or other "
+                    "Latin-script word inside speech with its Hindi word in Devanagari. Keep speaker names, order, meaning and the English delivery notes "
+                    "in parentheses. Return only the section, starting with its heading.")
+
+
+def _fix_dialogue(text: str, issues: list[str]) -> str:
+    """Targeted, small repair for language-only failures: the rest of the unit is kept byte-for-byte."""
+    m = re.search(r"^[ \t]*#{1,3}[ \t]*[^\n]*dialog[^\n]*\n(?:(?![ \t]*#{1,3}[ \t])[^\n]*\n?)*", text, re.I | re.M)
+    if not m:
+        return text
+    new = _ai([{"role": "system", "content": DIALOGUE_FIX_SYS},
+               {"role": "user", "content": "Problems: " + "; ".join(issues) + "\n\n" + m.group(0)}], 3000).strip()
+    if not re.match(r"^[ \t]*#{1,3}[^\n]*dialog", new, re.I):
+        return text
+    return text[:m.start()] + new + "\n\n" + text[m.end():]
+
+
 def _write_and_check(i, plan, spec, brief, fix=None, draft=None, neighbours=None):
-    text = enforce_locks(canonical_header(_ai(_unit_messages(i, plan, spec, brief, fix, draft, neighbours), 12000, False, True), i, spec), i, plan, spec)
-    problems = check_unit(text, i, plan, spec) + language_issues(text, spec)
+    text = enforce_locks(canonical_header(_ai(_unit_messages(i, plan, spec, brief, fix, draft, neighbours), 12000, False, fix is None), i, spec), i, plan, spec)
+    allowed = _allowed_words(plan)
+    problems = check_unit(text, i, plan, spec) + language_issues(text, spec, allowed)
+    lang = language_issues(text, spec, allowed)
+    if lang and len(problems) == len(lang):  # only language problems: fix just the dialogue lines
+        for _ in range(2):
+            text = _fix_dialogue(text, lang)
+            lang = language_issues(text, spec, allowed)
+            if not lang:
+                break
+        problems = check_unit(text, i, plan, spec) + lang
     if not problems and spec["multi"]:
         problems = fact_issues(text, i, plan)
     if problems:
-        print(f"[prompts] unit {i} gate: " + " | ".join(p.split(':')[0][:40] for p in problems[:5]), flush=True)
+        print(f"[prompts] unit {i} gate: " + " | ".join(p[:120] for p in problems[:5]), flush=True)
     return i, text, problems
 
 
@@ -727,7 +760,10 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                                                      "series": window}, ensure_ascii=False)}], 2500, True))
                         scores.append(int(a_.get("score", 0)))
                         notes_all += [x for x in a_.get("issues", []) if isinstance(x, str)]
-                        flagged |= {i for i in a_.get("units", []) if isinstance(i, int) and i in idx}
+                        hit = {i for i in a_.get("units", []) if isinstance(i, int) and i in idx}
+                        if int(a_.get("score", 0)) < MIN_SCORE and not hit and not any(re.search(r"unit \d+", str(x), re.I) for x in a_.get("issues", [])):
+                            hit = set(idx)  # low score but nothing named: repair the whole weak window
+                        flagged |= hit
                     except (ValueError, TypeError, OpError):
                         scores.append(0)
                     if start + 4 >= count:

@@ -108,3 +108,10 @@ def test_nemotron_pacing_limits():
     ts = [threading.Thread(target=go) for _ in range(3)]; [t.start() for t in ts]; [t.join() for t in ts]
     assert peak[0] <= 2 and len(lim.stamps) == 3
     assert P.NVIDIA_RPM == 40 and P.NVIDIA_CONCURRENCY == 4
+
+def test_names_allowed_and_dialogue_only_fix(monkeypatch):
+    assert P.language_issues("## Dialogue\nमीरा: Mira यहाँ है", {"devanagari": True}, {"mira"}) == []
+    t = "# Scene 1: X\n\n## Dialogue\nमीरा: यह lock है\n\n## Camera\nwide"
+    monkeypatch.setattr(P, "CALL", lambda *a, **k: "## Dialogue\nमीरा: यह ताला है")
+    out = P._fix_dialogue(t, ["lock"])
+    assert "ताला" in out and "## Camera\nwide" in out and "lock" not in out
