@@ -60,3 +60,8 @@ def test_plan_shapes_are_normalized():
 def test_cast_names_resolve_to_bible():
     p = plan(3); p["outline"][0]["characters"] = ["mira", "Ghost extra"]
     assert P.normalize_plan(p, 3)["outline"][0]["characters"] == ["Mira"]
+
+def test_canonical_header_and_blueprint_strip():
+    out = P.canonical_header("# Scene 3: The Door\n## Master Story Blueprint\nblah\n# Scene 3\n## Character Details\nx", 3, {"multi": True, "noun": "scene"})
+    assert out.startswith("# Scene 3: The Door") and out.count("# Scene 3") == 1
+    assert "blah" not in out and "## Character Details" in out

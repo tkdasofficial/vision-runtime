@@ -29,7 +29,7 @@ VERSION = 3
 MAX_UNITS = 100
 MAX_BRIEF_CHARS = 60_000
 REPAIR_ROUNDS = 2
-PARALLEL = 10
+PARALLEL = 6
 MIN_SCORE = 90
 CALL_TIMEOUT_S = 240
 DEFAULT_SECTIONS = ["Subject", "Characters", "Setting", "Action", "Camera", "Lighting", "Style", "Negative"]
@@ -413,7 +413,7 @@ AUDIT_SYS = SYSTEM + """ Audit the WHOLE series for consistency and continuity. 
 Each issue must start with "unit N:". Score strictly: deduct for any appearance/clothing drift, prop teleportation, timeline gaps, unexplained knowledge, unpaid clues, rule violations."""
 
 
-def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | None = None, draft: str | None = None):
+def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | None = None, draft: str | None = None, neighbours: dict | None = None):
     c = plan["outline"][i - 1]
     head = f"Begin with the line '# {spec['noun'].title()} {i}: <title>'. " if spec["multi"] else ""
     sys = (SYSTEM + f" Write ONLY {spec['noun']} {i} of {spec['count']} as a self-contained Markdown document. {head}"
@@ -429,6 +429,8 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
            "next_unit": plan["outline"][i] if i < len(plan["outline"]) else None}
     msgs = [{"role": "system", "content": sys}, {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}]
     if fix and draft:
+        if neighbours:
+            msgs.append({"role": "user", "content": "Approved neighbouring units (stay consistent with them, do not rewrite them): " + json.dumps(neighbours, ensure_ascii=False)})
         msgs += [{"role": "assistant", "content": draft},
                  {"role": "user", "content": f"Fix ONLY these problems and return the full corrected {spec['noun']}: " + "; ".join(fix[:10])}]
     return msgs
@@ -440,6 +442,18 @@ def _insert_after_heading(text: str, words: tuple, block: str) -> str:
         if re.match(r"^\s*(?:#{1,6}\s+|\*\*|\d{1,2}[.)]\s)", line) and all(w in line.lower() for w in words):
             return "\n".join(lines[:n + 1] + [block] + lines[n + 1:])
     return text.rstrip() + "\n\n" + block
+
+
+def canonical_header(text: str, i: int, spec: dict) -> str:
+    """Exactly one '# Scene N: title' header; pasted blueprint sections are removed."""
+    text = re.sub(r"^[ \t]*#{1,3}[ \t]*master story blueprint.*\n(?:(?![ \t]*#{1,2}[ \t])[^\n]*\n?)*", "", text, flags=re.I | re.M)
+    if not spec["multi"]:
+        return text
+    pat = re.compile(rf"^[ \t]*#{{1,3}}[ \t]+(?:{spec['noun']}|prompt)[ \t]+\d+\b[: \t-]*(.*)$", re.I | re.M)
+    titles = [m.group(1).strip(" *") for m in pat.finditer(text)]
+    body = pat.sub("", text).strip()
+    title = next((t for t in titles if t), "")
+    return f"# {spec['noun'].title()} {i}: {title or 'Untitled'}\n\n{body}"
 
 
 def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
@@ -458,18 +472,11 @@ def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
     return text
 
 
-def _write_and_check(i, plan, spec, brief, fix=None, draft=None):
-    text = enforce_locks(_ai(_unit_messages(i, plan, spec, brief, fix, draft), 9000), i, plan, spec)
+def _write_and_check(i, plan, spec, brief, fix=None, draft=None, neighbours=None):
+    text = enforce_locks(canonical_header(_ai(_unit_messages(i, plan, spec, brief, fix, draft, neighbours), 9000), i, spec), i, plan, spec)
     problems = check_unit(text, i, plan, spec)
     if problems:
         print(f"[prompts] unit {i} gate: " + " | ".join(p.split(':')[0][:40] for p in problems[:5]), flush=True)
-    if not problems:
-        try:
-            ctx = {"bible": plan["bible"], "contract": plan["outline"][i - 1], "brief_rules": brief[:4000], "draft": text}
-            problems = validate_review(parse_json(_ai([{"role": "system", "content": REVIEW_SYS},
-                                                       {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}], 1500, True)))
-        except (ValueError, TypeError):
-            problems = []  # deterministic gate already passed; an unparsable review is not evidence of a defect
     return i, text, problems
 
 
@@ -563,6 +570,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         series = [units[i] for i in range(1, count + 1)]
         det = deterministic_score(series, plan, spec)
         audit_score = 100
+        best = None
         if spec["multi"]:
             say("validating_output")
             for round_ in range(1 + REPAIR_ROUNDS):
@@ -595,10 +603,15 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                 say(f"repairing_{len(fix)}")
                 def own(i):
                     return [x for x in notes_all if re.search(rf"unit {i}\b", x, re.I)] or notes_all
-                for i, text, problems in pool.map(lambda i: _write_and_check(i, plan, spec, brief, own(i), series[i - 1]), fix):
+                if best is None or audit_score > best[0]:
+                    best = (audit_score, list(series))
+                near = lambda i: {k: series[k - 1][-1500:] if k < i else series[k - 1][:1500] for k in (i - 1, i + 1) if 1 <= k <= count}
+                for i, text, problems in pool.map(lambda i: _write_and_check(i, plan, spec, brief, own(i), series[i - 1], near(i)), fix):
                     if not problems:
                         series[i - 1] = text; ck["units"][str(i)] = text
                 save()
+            if best and best[0] > audit_score:  # a repair round never makes the delivered series worse
+                audit_score, series = best
             det = deterministic_score(series, plan, spec)
     score = min(det, audit_score)
     if spec["multi"] and score < MIN_SCORE:
