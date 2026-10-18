@@ -390,8 +390,7 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
     head = f"Begin with the line '# {spec['noun'].title()} {i}: <title>'. " if spec["multi"] else ""
     sys = (SYSTEM + f" Write ONLY {spec['noun']} {i} of {spec['count']} as a self-contained Markdown document. {head}"
            f"Use these sections as '## ' headings, in order: {'; '.join(spec['sections'])}. "
-           "Copy WORD FOR WORD into the text: each present character's bible descriptor, the bible style line, the bible negative line, "
-           "and each contracted 'after' value. Start from the 'before' state, end at the 'after' state; never reveal later units. "
+           "Keep every character exactly as the bible describes (the worker inserts the locked descriptors itself). Start from the 'before' state, end at the 'after' state; never reveal later units. "
            "Use ONLY the contract's time, location, props_in_play and injuries: invent no new props, wounds, events or locations. "
            "Name each planted/paid clue exactly. Do not repeat the blueprint. The ending must lead directly into next_unit.")
     if spec["devanagari"]:
@@ -407,9 +406,35 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
     return msgs
 
 
+def _insert_after_heading(text: str, words: tuple, block: str) -> str:
+    lines = text.splitlines()
+    for n, line in enumerate(lines):
+        if re.match(r"^\s*(?:#{1,6}\s+|\*\*|\d{1,2}[.)]\s)", line) and all(w in line.lower() for w in words):
+            return "\n".join(lines[:n + 1] + [block] + lines[n + 1:])
+    return text.rstrip() + "\n\n" + block
+
+
+def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
+    """Locks are written by the worker, not trusted to the model: every unit carries the identical canonical
+    character descriptors, style line, negative line and contracted end state, so they cannot drift."""
+    b, c = plan["bible"], plan["outline"][i - 1]
+    cast = c.get("characters", [])
+    if cast:
+        chars = "\n".join(f"- **{n} (locked appearance):** {b['characters'][n]}" for n in cast)
+        text = _insert_after_heading(text, ("character",), chars)
+    text = _insert_after_heading(text, ("visual",), f"**Locked style:** {b['style']}")
+    text = _insert_after_heading(text, ("negative",), f"**Locked negative:** {b['negative']}")
+    state = [f"- {k}: {v}" for k, v in (c.get("after") or {}).items()]
+    where = f"- Time: {c.get('time', '')} | Location: {c.get('location', '')}"
+    text = _insert_after_heading(text, ("continuity",), "**Canonical state at scene end:**\n" + "\n".join([where] + state))
+    return text
+
+
 def _write_and_check(i, plan, spec, brief, fix=None, draft=None):
-    text = _ai(_unit_messages(i, plan, spec, brief, fix, draft), 5000)
+    text = enforce_locks(_ai(_unit_messages(i, plan, spec, brief, fix, draft), 5000), i, plan, spec)
     problems = check_unit(text, i, plan, spec)
+    if problems:
+        print(f"[prompts] unit {i} gate: " + " | ".join(p.split(':')[0][:40] for p in problems[:5]), flush=True)
     if not problems:
         try:
             ctx = {"bible": plan["bible"], "contract": plan["outline"][i - 1], "brief_rules": brief[:4000], "draft": text}
