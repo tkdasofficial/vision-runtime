@@ -85,3 +85,8 @@ def test_fact_ledger_compared_by_code(monkeypatch):
 def test_latin_in_dialogue_flagged():
     assert P.language_issues("## Dialogue (Hindi)\nप्रिया (whispering): यह lock खुल गया", {"devanagari": True})
     assert P.language_issues("## Dialogue (Hindi)\nPriya (whispering): यह ताला खुल गया", {"devanagari": True}) == []
+
+def test_long_gap_gets_time_skip():
+    p = plan(2); p["outline"][1]["time"] = "D2 05:00"
+    P.validate_plan(p, 2) if hasattr(P, "validate_plan") else None
+    assert "hours pass" in p["outline"][1].get("time_skip", "")

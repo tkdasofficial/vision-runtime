@@ -333,7 +333,9 @@ def validate_plan(plan, count: int) -> list[str]:
             if t < last:
                 issues.append(f"Unit {i} time goes backwards")
             elif i > 1 and (t[0] - last[0]) * 1440 + t[1] - last[1] > 180 and not beat.get("time_skip"):
-                issues.append(f"Unit {i} jumps more than 3 hours; set time_skip to the on-screen reason or keep time continuous")
+                # deterministic repair: the writer must show the elapsed time on screen
+                gap = ((t[0] - last[0]) * 1440 + t[1] - last[1]) // 60
+                beat["time_skip"] = f"about {gap} hours pass since the previous unit; open by showing what happened in that time"
             last = t
     clues = plan.get("clues")
     if count > 1:
@@ -520,6 +522,7 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
            "Use ONLY the contract's time, location, props_in_play and injuries: invent no new props, wounds, events or locations. "
            "Characters begin at start_positions and finish at end_positions; anyone who changes place is SHOWN moving. Props begin at start_props and end at end_props. "
            "Characters not in this unit's cast stay off-screen where start_positions says. "
+           "If the contract has time_skip, the Context and first action must state and show that elapsed time. "
            "Name each planted/paid clue exactly. Do not repeat the blueprint. The ending must lead directly into next_unit.")
     if spec["devanagari"]:
         sys += (" Dialogue lines are pure natural Hindi in Devanagari only (no Latin letters, no words from other languages); "
