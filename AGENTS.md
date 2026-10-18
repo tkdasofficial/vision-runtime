@@ -1,0 +1,1 @@
+- Background stories use the provider chain in runtime/story.py and read repository secrets only inside runtime calls; run-job.yml exposes those secrets only to story jobs. Why: background requests use one explicit primary/fallback path without leaking credentials to other operations.
