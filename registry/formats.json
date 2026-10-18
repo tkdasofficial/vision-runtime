@@ -1,0 +1,4305 @@
+{
+ "canonical_formats": 121,
+ "categories": 18,
+ "formats": [
+  {
+   "id": "pdf",
+   "name": "PDF",
+   "category": "document",
+   "aliases": [
+    "pdf"
+   ],
+   "workflow": "documents",
+   "worker": "documents",
+   "dependencies": {
+    "apt": [
+     "libreoffice-writer"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "docx",
+     "epub"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Text-only extraction when converting from PDF; layout/images are not kept. Built-in PDF font cannot draw non-Latin scripts \u2014 reported, never silently dropped."
+  },
+  {
+   "id": "doc",
+   "name": "Word 97-2003",
+   "category": "document",
+   "aliases": [
+    "doc"
+   ],
+   "workflow": "documents",
+   "worker": "documents",
+   "dependencies": {
+    "apt": [
+     "libreoffice-writer"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "pdf",
+      "docx",
+      "odt",
+      "rtf",
+      "txt",
+      "html"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "docx",
+   "name": "Word",
+   "category": "document",
+   "aliases": [
+    "docx"
+   ],
+   "workflow": "documents",
+   "worker": "documents",
+   "dependencies": {
+    "apt": [
+     "libreoffice-writer"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "pdf",
+     "html",
+     "md",
+     "txt",
+     "epub"
+    ],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "doc",
+      "odt",
+      "rtf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "txt",
+   "name": "Plain text",
+   "category": "document",
+   "aliases": [
+    "txt",
+    "text"
+   ],
+   "workflow": "documents",
+   "worker": "documents",
+   "dependencies": {
+    "apt": [
+     "libreoffice-writer"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "pdf",
+     "docx",
+     "html",
+     "md",
+     "epub"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "md",
+   "name": "Markdown",
+   "category": "document",
+   "aliases": [
+    "md",
+    "markdown"
+   ],
+   "workflow": "documents",
+   "worker": "documents",
+   "dependencies": {
+    "apt": [
+     "libreoffice-writer"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "pdf",
+     "docx",
+     "html",
+     "txt",
+     "epub"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "rtf",
+   "name": "Rich Text",
+   "category": "document",
+   "aliases": [
+    "rtf"
+   ],
+   "workflow": "documents",
+   "worker": "documents",
+   "dependencies": {
+    "apt": [
+     "libreoffice-writer"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "pdf",
+     "docx",
+     "html",
+     "md",
+     "txt",
+     "epub"
+    ],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "doc",
+      "odt"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Inline reading keeps text only; formatting kept via the runtime."
+  },
+  {
+   "id": "odt",
+   "name": "OpenDocument Text",
+   "category": "document",
+   "aliases": [
+    "odt"
+   ],
+   "workflow": "documents",
+   "worker": "documents",
+   "dependencies": {
+    "apt": [
+     "libreoffice-writer"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [
+     "pdf",
+     "docx",
+     "html",
+     "md",
+     "txt",
+     "epub"
+    ],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "doc",
+      "rtf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "html",
+   "name": "HTML",
+   "category": "document",
+   "aliases": [
+    "html",
+    "htm"
+   ],
+   "workflow": "documents",
+   "worker": "documents",
+   "dependencies": {
+    "apt": [
+     "libreoffice-writer"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "pdf",
+     "docx",
+     "md",
+     "txt",
+     "epub",
+     "csv",
+     "xlsx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Scripts are never run; tables can be extracted."
+  },
+  {
+   "id": "epub",
+   "name": "EPUB",
+   "category": "ebook",
+   "aliases": [
+    "epub"
+   ],
+   "workflow": "ebooks",
+   "worker": "ebooks",
+   "dependencies": {
+    "apt": [
+     "calibre",
+     "7zip"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": {
+     "op": "ebook_convert",
+     "targets": [
+      "mobi",
+      "azw3",
+      "fb2"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "tex",
+   "name": "LaTeX",
+   "category": "document",
+   "aliases": [
+    "tex",
+    "latex"
+   ],
+   "workflow": "tex",
+   "worker": "documents",
+   "dependencies": {
+    "apt": [
+     "texlive-latex-base",
+     "texlive-latex-recommended",
+     "texlive-fonts-recommended"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md"
+    ],
+    "convert_runtime": {
+     "op": "render",
+     "targets": [
+      "pdf"
+     ]
+    },
+    "render": true,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Compiled with pdflatex, shell-escape disabled."
+  },
+  {
+   "id": "xls",
+   "name": "Excel 97-2003",
+   "category": "spreadsheet",
+   "aliases": [
+    "xls"
+   ],
+   "workflow": "spreadsheets",
+   "worker": "spreadsheets",
+   "dependencies": {
+    "apt": [
+     "libreoffice-calc"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "xlsx",
+      "ods",
+      "csv",
+      "pdf",
+      "html"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "xlsx",
+   "name": "Excel",
+   "category": "spreadsheet",
+   "aliases": [
+    "xlsx",
+    "xlsm"
+   ],
+   "workflow": "spreadsheets",
+   "worker": "spreadsheets",
+   "dependencies": {
+    "apt": [
+     "libreoffice-calc"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "tsv",
+     "json",
+     "jsonl",
+     "xml",
+     "yaml",
+     "toml",
+     "sql",
+     "ods",
+     "html",
+     "md",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "xls"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Values only; formulas, charts and styles are not kept inline."
+  },
+  {
+   "id": "csv",
+   "name": "CSV",
+   "category": "spreadsheet",
+   "aliases": [
+    "csv"
+   ],
+   "workflow": "data",
+   "worker": "data",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "tsv",
+     "json",
+     "jsonl",
+     "xml",
+     "yaml",
+     "toml",
+     "sql",
+     "xlsx",
+     "ods",
+     "html",
+     "md",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": {
+     "op": "data_convert",
+     "targets": [
+      "parquet",
+      "avro",
+      "sqlite"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "ods",
+   "name": "OpenDocument Spreadsheet",
+   "category": "spreadsheet",
+   "aliases": [
+    "ods"
+   ],
+   "workflow": "spreadsheets",
+   "worker": "spreadsheets",
+   "dependencies": {
+    "apt": [
+     "libreoffice-calc"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "tsv",
+     "json",
+     "jsonl",
+     "xml",
+     "yaml",
+     "toml",
+     "sql",
+     "xlsx",
+     "html",
+     "md",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "xls"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "tsv",
+   "name": "TSV",
+   "category": "spreadsheet",
+   "aliases": [
+    "tsv",
+    "tab"
+   ],
+   "workflow": "spreadsheets",
+   "worker": "spreadsheets",
+   "dependencies": {
+    "apt": [
+     "libreoffice-calc"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "json",
+     "jsonl",
+     "xml",
+     "yaml",
+     "toml",
+     "sql",
+     "xlsx",
+     "ods",
+     "html",
+     "md",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "json",
+   "name": "JSON",
+   "category": "data",
+   "aliases": [
+    "json"
+   ],
+   "workflow": "data",
+   "worker": "data",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "tsv",
+     "jsonl",
+     "xml",
+     "yaml",
+     "toml",
+     "sql",
+     "xlsx",
+     "ods",
+     "html",
+     "md",
+     "pdf",
+     "docx",
+     "ini",
+     "properties",
+     "env"
+    ],
+    "convert_runtime": {
+     "op": "data_convert",
+     "targets": [
+      "parquet",
+      "avro",
+      "sqlite"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "jsonl",
+   "name": "JSON Lines",
+   "category": "data",
+   "aliases": [
+    "jsonl",
+    "ndjson"
+   ],
+   "workflow": "data",
+   "worker": "data",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "tsv",
+     "json",
+     "xml",
+     "yaml",
+     "toml",
+     "sql",
+     "xlsx",
+     "ods",
+     "html",
+     "md",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "xml",
+   "name": "XML",
+   "category": "data",
+   "aliases": [
+    "xml"
+   ],
+   "workflow": "data",
+   "worker": "data",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "tsv",
+     "json",
+     "yaml",
+     "toml",
+     "sql",
+     "xlsx",
+     "ods",
+     "html",
+     "md",
+     "pdf",
+     "docx",
+     "yaml",
+     "toml"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "External entities are never resolved."
+  },
+  {
+   "id": "yaml",
+   "name": "YAML",
+   "category": "config",
+   "aliases": [
+    "yaml",
+    "yml"
+   ],
+   "workflow": "config",
+   "worker": "config",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "tsv",
+     "json",
+     "jsonl",
+     "xml",
+     "toml",
+     "sql",
+     "xlsx",
+     "ods",
+     "html",
+     "md",
+     "pdf",
+     "docx",
+     "json",
+     "toml",
+     "xml"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "toml",
+   "name": "TOML",
+   "category": "config",
+   "aliases": [
+    "toml"
+   ],
+   "workflow": "config",
+   "worker": "config",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "yaml",
+     "xml",
+     "csv",
+     "xlsx",
+     "ini"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "sql",
+   "name": "SQL",
+   "category": "data",
+   "aliases": [
+    "sql"
+   ],
+   "workflow": "data",
+   "worker": "data",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "json",
+     "xlsx",
+     "txt",
+     "md",
+     "html",
+     "pdf"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "INSERT statements are parsed into tables; SQL is never executed."
+  },
+  {
+   "id": "sqlite",
+   "name": "SQLite database",
+   "category": "data",
+   "aliases": [
+    "sqlite",
+    "sqlite3",
+    "db"
+   ],
+   "workflow": "sqlite",
+   "worker": "data",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "data_convert",
+     "targets": [
+      "csv",
+      "json",
+      "parquet",
+      "avro"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Opened read-only on the runtime; DB entries are verified by the SQLite header."
+  },
+  {
+   "id": "ppt",
+   "name": "PowerPoint 97-2003",
+   "category": "presentation",
+   "aliases": [
+    "ppt"
+   ],
+   "workflow": "presentations",
+   "worker": "presentations",
+   "dependencies": {
+    "apt": [
+     "libreoffice-impress"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "pptx",
+      "odp",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "pptx",
+   "name": "PowerPoint",
+   "category": "presentation",
+   "aliases": [
+    "pptx"
+   ],
+   "workflow": "presentations",
+   "worker": "presentations",
+   "dependencies": {
+    "apt": [
+     "libreoffice-impress"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "docx"
+    ],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "pdf",
+      "odp",
+      "ppt"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Inline conversion extracts slide text."
+  },
+  {
+   "id": "odp",
+   "name": "OpenDocument Presentation",
+   "category": "presentation",
+   "aliases": [
+    "odp"
+   ],
+   "workflow": "presentations",
+   "worker": "presentations",
+   "dependencies": {
+    "apt": [
+     "libreoffice-impress"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "docx"
+    ],
+    "convert_runtime": {
+     "op": "office_convert",
+     "targets": [
+      "pdf",
+      "pptx",
+      "ppt"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "css",
+   "name": "CSS",
+   "category": "code",
+   "aliases": [
+    "css"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "js",
+   "name": "JavaScript",
+   "category": "code",
+   "aliases": [
+    "js"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "jsx",
+   "name": "JSX",
+   "category": "code",
+   "aliases": [
+    "jsx"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "ts",
+   "name": "TypeScript",
+   "category": "code",
+   "aliases": [
+    "ts"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "tsx",
+   "name": "TSX",
+   "category": "code",
+   "aliases": [
+    "tsx"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "mjs",
+   "name": "ES module",
+   "category": "code",
+   "aliases": [
+    "mjs"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "cjs",
+   "name": "CommonJS",
+   "category": "code",
+   "aliases": [
+    "cjs"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "py",
+   "name": "Python",
+   "category": "code",
+   "aliases": [
+    "py"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "java",
+   "name": "Java",
+   "category": "code",
+   "aliases": [
+    "java"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "c",
+   "name": "C",
+   "category": "code",
+   "aliases": [
+    "c"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "cpp",
+   "name": "C++",
+   "category": "code",
+   "aliases": [
+    "cpp",
+    "cc",
+    "cxx"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "h",
+   "name": "C header",
+   "category": "code",
+   "aliases": [
+    "h"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "hpp",
+   "name": "C++ header",
+   "category": "code",
+   "aliases": [
+    "hpp",
+    "hh"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "cs",
+   "name": "C#",
+   "category": "code",
+   "aliases": [
+    "cs"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "go",
+   "name": "Go",
+   "category": "code",
+   "aliases": [
+    "go"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "rs",
+   "name": "Rust",
+   "category": "code",
+   "aliases": [
+    "rs"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "php",
+   "name": "PHP",
+   "category": "code",
+   "aliases": [
+    "php"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "rb",
+   "name": "Ruby",
+   "category": "code",
+   "aliases": [
+    "rb"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "swift",
+   "name": "Swift",
+   "category": "code",
+   "aliases": [
+    "swift"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "kt",
+   "name": "Kotlin",
+   "category": "code",
+   "aliases": [
+    "kt"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "kts",
+   "name": "Kotlin script",
+   "category": "code",
+   "aliases": [
+    "kts"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "sh",
+   "name": "Shell script",
+   "category": "code",
+   "aliases": [
+    "sh",
+    "bash"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "bat",
+   "name": "Batch file",
+   "category": "code",
+   "aliases": [
+    "bat",
+    "cmd"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "ps1",
+   "name": "PowerShell",
+   "category": "code",
+   "aliases": [
+    "ps1"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Treated as text; never executed."
+  },
+  {
+   "id": "ipynb",
+   "name": "Jupyter notebook",
+   "category": "code",
+   "aliases": [
+    "ipynb"
+   ],
+   "workflow": "code",
+   "worker": "code",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "py",
+     "md",
+     "html",
+     "txt",
+     "pdf",
+     "json"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Cells are converted, never executed."
+  },
+  {
+   "id": "env",
+   "name": "Env file",
+   "category": "config",
+   "aliases": [
+    "env"
+   ],
+   "workflow": "config",
+   "worker": "config",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "yaml",
+     "properties",
+     "ini",
+     "toml"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Values that look like secrets are flagged when inspected."
+  },
+  {
+   "id": "ini",
+   "name": "INI",
+   "category": "config",
+   "aliases": [
+    "ini"
+   ],
+   "workflow": "config",
+   "worker": "config",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "yaml",
+     "toml",
+     "properties",
+     "env"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "cfg",
+   "name": "CFG config",
+   "category": "config",
+   "aliases": [
+    "cfg"
+   ],
+   "workflow": "config",
+   "worker": "config",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "yaml",
+     "toml",
+     "ini"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Parsed as INI-style sections."
+  },
+  {
+   "id": "conf",
+   "name": "CONF config",
+   "category": "config",
+   "aliases": [
+    "conf"
+   ],
+   "workflow": "config",
+   "worker": "config",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "yaml",
+     "toml",
+     "ini"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Parsed as INI-style key=value; other syntaxes are kept as text."
+  },
+  {
+   "id": "properties",
+   "name": "Java properties",
+   "category": "config",
+   "aliases": [
+    "properties"
+   ],
+   "workflow": "config",
+   "worker": "config",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "yaml",
+     "env",
+     "ini",
+     "toml"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "dockerfile",
+   "name": "Dockerfile",
+   "category": "config",
+   "aliases": [
+    "dockerfile"
+   ],
+   "workflow": "config",
+   "worker": "config",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx",
+     "json"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Instructions are listed, never built."
+  },
+  {
+   "id": "gitignore",
+   "name": ".gitignore",
+   "category": "config",
+   "aliases": [
+    "gitignore"
+   ],
+   "workflow": "config",
+   "worker": "config",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx",
+     "json"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "png",
+   "name": "PNG",
+   "category": "image",
+   "aliases": [
+    "png"
+   ],
+   "workflow": "images",
+   "worker": "images",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "Pillow==11.3.0",
+     "pillow-heif==1.1.0",
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "image_convert",
+     "targets": [
+      "jpeg",
+      "webp",
+      "gif",
+      "bmp",
+      "tiff",
+      "ico",
+      "avif",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Pixel conversion on the runtime (Pillow). Reading = OCR/description; no image generation."
+  },
+  {
+   "id": "jpeg",
+   "name": "JPEG",
+   "category": "image",
+   "aliases": [
+    "jpg",
+    "jpeg"
+   ],
+   "workflow": "images",
+   "worker": "images",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "Pillow==11.3.0",
+     "pillow-heif==1.1.0",
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "image_convert",
+     "targets": [
+      "png",
+      "webp",
+      "gif",
+      "bmp",
+      "tiff",
+      "ico",
+      "avif",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Pixel conversion on the runtime (Pillow). Reading = OCR/description; no image generation."
+  },
+  {
+   "id": "webp",
+   "name": "WebP",
+   "category": "image",
+   "aliases": [
+    "webp"
+   ],
+   "workflow": "images",
+   "worker": "images",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "Pillow==11.3.0",
+     "pillow-heif==1.1.0",
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "image_convert",
+     "targets": [
+      "png",
+      "jpeg",
+      "gif",
+      "bmp",
+      "tiff",
+      "ico",
+      "avif",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Pixel conversion on the runtime (Pillow). Reading = OCR/description; no image generation."
+  },
+  {
+   "id": "bmp",
+   "name": "BMP",
+   "category": "image",
+   "aliases": [
+    "bmp"
+   ],
+   "workflow": "images",
+   "worker": "images",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "Pillow==11.3.0",
+     "pillow-heif==1.1.0",
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "image_convert",
+     "targets": [
+      "png",
+      "jpeg",
+      "webp",
+      "gif",
+      "tiff",
+      "ico",
+      "avif",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Pixel conversion on the runtime (Pillow). Reading = OCR/description; no image generation."
+  },
+  {
+   "id": "tiff",
+   "name": "TIFF",
+   "category": "image",
+   "aliases": [
+    "tiff",
+    "tif"
+   ],
+   "workflow": "images",
+   "worker": "images",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "Pillow==11.3.0",
+     "pillow-heif==1.1.0",
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "image_convert",
+     "targets": [
+      "png",
+      "jpeg",
+      "webp",
+      "gif",
+      "bmp",
+      "ico",
+      "avif",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Pixel conversion on the runtime (Pillow). Reading = OCR/description; no image generation."
+  },
+  {
+   "id": "gif",
+   "name": "GIF",
+   "category": "image",
+   "aliases": [
+    "gif"
+   ],
+   "workflow": "images",
+   "worker": "images",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "Pillow==11.3.0",
+     "pillow-heif==1.1.0",
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "image_convert",
+     "targets": [
+      "png",
+      "jpeg",
+      "webp",
+      "bmp",
+      "tiff",
+      "ico",
+      "avif",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Pixel conversion on the runtime (Pillow). Reading = OCR/description; no image generation."
+  },
+  {
+   "id": "ico",
+   "name": "ICO",
+   "category": "image",
+   "aliases": [
+    "ico"
+   ],
+   "workflow": "images",
+   "worker": "images",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "Pillow==11.3.0",
+     "pillow-heif==1.1.0",
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "image_convert",
+     "targets": [
+      "png",
+      "jpeg",
+      "webp",
+      "gif",
+      "bmp",
+      "tiff",
+      "avif",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Pixel conversion on the runtime (Pillow). Reading = OCR/description; no image generation."
+  },
+  {
+   "id": "avif",
+   "name": "AVIF",
+   "category": "image",
+   "aliases": [
+    "avif"
+   ],
+   "workflow": "images",
+   "worker": "images",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "Pillow==11.3.0",
+     "pillow-heif==1.1.0",
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "image_convert",
+     "targets": [
+      "png",
+      "jpeg",
+      "webp",
+      "gif",
+      "bmp",
+      "tiff",
+      "ico",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Pixel conversion on the runtime (Pillow). Reading = OCR/description; no image generation."
+  },
+  {
+   "id": "heic",
+   "name": "HEIC",
+   "category": "image",
+   "aliases": [
+    "heic",
+    "heif"
+   ],
+   "workflow": "images",
+   "worker": "images",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "Pillow==11.3.0",
+     "pillow-heif==1.1.0",
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "image_convert",
+     "targets": [
+      "png",
+      "jpeg",
+      "webp",
+      "gif",
+      "bmp",
+      "tiff",
+      "ico",
+      "avif",
+      "pdf"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded on the runtime (libheif); HEIC is not written as an output."
+  },
+  {
+   "id": "svg",
+   "name": "SVG",
+   "category": "image",
+   "aliases": [
+    "svg"
+   ],
+   "workflow": "vector",
+   "worker": "diagrams",
+   "dependencies": {
+    "apt": [
+     "libcairo2"
+    ],
+    "pip": [
+     "cairosvg==2.8.2",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt"
+    ],
+    "convert_runtime": {
+     "op": "render",
+     "targets": [
+      "png",
+      "pdf"
+     ]
+    },
+    "render": true,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Scripts/external references are reported on inspect; rendered with CairoSVG (no network)."
+  },
+  {
+   "id": "wav",
+   "name": "WAV",
+   "category": "audio",
+   "aliases": [
+    "wav"
+   ],
+   "workflow": "audio",
+   "worker": "audio",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "audio_convert",
+     "targets": [
+      "mp3",
+      "flac",
+      "ogg",
+      "opus",
+      "m4a",
+      "aac",
+      "aiff",
+      "wma"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded and re-encoded with FFmpeg; lossy targets lose quality. Reading = speech-to-text."
+  },
+  {
+   "id": "mp3",
+   "name": "MP3",
+   "category": "audio",
+   "aliases": [
+    "mp3"
+   ],
+   "workflow": "audio",
+   "worker": "audio",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "audio_convert",
+     "targets": [
+      "wav",
+      "flac",
+      "ogg",
+      "opus",
+      "m4a",
+      "aac",
+      "aiff",
+      "wma"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded and re-encoded with FFmpeg; lossy targets lose quality. Reading = speech-to-text."
+  },
+  {
+   "id": "flac",
+   "name": "FLAC",
+   "category": "audio",
+   "aliases": [
+    "flac"
+   ],
+   "workflow": "audio",
+   "worker": "audio",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "audio_convert",
+     "targets": [
+      "mp3",
+      "wav",
+      "ogg",
+      "opus",
+      "m4a",
+      "aac",
+      "aiff",
+      "wma"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded and re-encoded with FFmpeg; lossy targets lose quality. Reading = speech-to-text."
+  },
+  {
+   "id": "ogg",
+   "name": "Ogg Vorbis",
+   "category": "audio",
+   "aliases": [
+    "ogg",
+    "oga"
+   ],
+   "workflow": "audio",
+   "worker": "audio",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "audio_convert",
+     "targets": [
+      "mp3",
+      "wav",
+      "flac",
+      "opus",
+      "m4a",
+      "aac",
+      "aiff",
+      "wma"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded and re-encoded with FFmpeg; lossy targets lose quality. Reading = speech-to-text."
+  },
+  {
+   "id": "m4a",
+   "name": "M4A",
+   "category": "audio",
+   "aliases": [
+    "m4a"
+   ],
+   "workflow": "audio",
+   "worker": "audio",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "audio_convert",
+     "targets": [
+      "mp3",
+      "wav",
+      "flac",
+      "ogg",
+      "opus",
+      "aac",
+      "aiff",
+      "wma"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded and re-encoded with FFmpeg; lossy targets lose quality. Reading = speech-to-text."
+  },
+  {
+   "id": "aac",
+   "name": "AAC",
+   "category": "audio",
+   "aliases": [
+    "aac"
+   ],
+   "workflow": "audio",
+   "worker": "audio",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "audio_convert",
+     "targets": [
+      "mp3",
+      "wav",
+      "flac",
+      "ogg",
+      "opus",
+      "m4a",
+      "aiff",
+      "wma"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded and re-encoded with FFmpeg; lossy targets lose quality. Reading = speech-to-text."
+  },
+  {
+   "id": "wma",
+   "name": "WMA",
+   "category": "audio",
+   "aliases": [
+    "wma"
+   ],
+   "workflow": "audio",
+   "worker": "audio",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "audio_convert",
+     "targets": [
+      "mp3",
+      "wav",
+      "flac",
+      "ogg",
+      "opus",
+      "m4a",
+      "aac",
+      "aiff"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded and re-encoded with FFmpeg; lossy targets lose quality. Reading = speech-to-text."
+  },
+  {
+   "id": "opus",
+   "name": "Opus",
+   "category": "audio",
+   "aliases": [
+    "opus"
+   ],
+   "workflow": "audio",
+   "worker": "audio",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "audio_convert",
+     "targets": [
+      "mp3",
+      "wav",
+      "flac",
+      "ogg",
+      "m4a",
+      "aac",
+      "aiff",
+      "wma"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded and re-encoded with FFmpeg; lossy targets lose quality. Reading = speech-to-text."
+  },
+  {
+   "id": "aiff",
+   "name": "AIFF",
+   "category": "audio",
+   "aliases": [
+    "aiff",
+    "aif"
+   ],
+   "workflow": "audio",
+   "worker": "audio",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "audio_convert",
+     "targets": [
+      "mp3",
+      "wav",
+      "flac",
+      "ogg",
+      "opus",
+      "m4a",
+      "aac",
+      "wma"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Decoded and re-encoded with FFmpeg; lossy targets lose quality. Reading = speech-to-text."
+  },
+  {
+   "id": "mp4",
+   "name": "MP4",
+   "category": "video",
+   "aliases": [
+    "mp4"
+   ],
+   "workflow": "video",
+   "worker": "video",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "video_convert",
+     "targets": [
+      "webm",
+      "mov",
+      "mkv",
+      "m4v",
+      "avi",
+      "wmv",
+      "mpeg",
+      "3gp"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Transcoded with FFmpeg (max 15 min); audio can be extracted via audio_convert. No video generation."
+  },
+  {
+   "id": "webm",
+   "name": "WebM",
+   "category": "video",
+   "aliases": [
+    "webm"
+   ],
+   "workflow": "video",
+   "worker": "video",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "video_convert",
+     "targets": [
+      "mp4",
+      "mov",
+      "mkv",
+      "m4v",
+      "avi",
+      "wmv",
+      "mpeg",
+      "3gp"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Transcoded with FFmpeg (max 15 min); audio can be extracted via audio_convert. No video generation."
+  },
+  {
+   "id": "mov",
+   "name": "QuickTime",
+   "category": "video",
+   "aliases": [
+    "mov"
+   ],
+   "workflow": "video",
+   "worker": "video",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "video_convert",
+     "targets": [
+      "mp4",
+      "webm",
+      "mkv",
+      "m4v",
+      "avi",
+      "wmv",
+      "mpeg",
+      "3gp"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Transcoded with FFmpeg (max 15 min); audio can be extracted via audio_convert. No video generation."
+  },
+  {
+   "id": "mkv",
+   "name": "Matroska",
+   "category": "video",
+   "aliases": [
+    "mkv"
+   ],
+   "workflow": "video",
+   "worker": "video",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "video_convert",
+     "targets": [
+      "mp4",
+      "webm",
+      "mov",
+      "m4v",
+      "avi",
+      "wmv",
+      "mpeg",
+      "3gp"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Transcoded with FFmpeg (max 15 min); audio can be extracted via audio_convert. No video generation."
+  },
+  {
+   "id": "avi",
+   "name": "AVI",
+   "category": "video",
+   "aliases": [
+    "avi"
+   ],
+   "workflow": "video",
+   "worker": "video",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "video_convert",
+     "targets": [
+      "mp4",
+      "webm",
+      "mov",
+      "mkv",
+      "m4v",
+      "wmv",
+      "mpeg",
+      "3gp"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Transcoded with FFmpeg (max 15 min); audio can be extracted via audio_convert. No video generation."
+  },
+  {
+   "id": "wmv",
+   "name": "WMV",
+   "category": "video",
+   "aliases": [
+    "wmv"
+   ],
+   "workflow": "video",
+   "worker": "video",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "video_convert",
+     "targets": [
+      "mp4",
+      "webm",
+      "mov",
+      "mkv",
+      "m4v",
+      "avi",
+      "mpeg",
+      "3gp"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Transcoded with FFmpeg (max 15 min); audio can be extracted via audio_convert. No video generation."
+  },
+  {
+   "id": "m4v",
+   "name": "M4V",
+   "category": "video",
+   "aliases": [
+    "m4v"
+   ],
+   "workflow": "video",
+   "worker": "video",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "video_convert",
+     "targets": [
+      "mp4",
+      "webm",
+      "mov",
+      "mkv",
+      "avi",
+      "wmv",
+      "mpeg",
+      "3gp"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Transcoded with FFmpeg (max 15 min); audio can be extracted via audio_convert. No video generation."
+  },
+  {
+   "id": "mpeg",
+   "name": "MPEG",
+   "category": "video",
+   "aliases": [
+    "mpeg",
+    "mpg"
+   ],
+   "workflow": "video",
+   "worker": "video",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "video_convert",
+     "targets": [
+      "mp4",
+      "webm",
+      "mov",
+      "mkv",
+      "m4v",
+      "avi",
+      "wmv",
+      "3gp"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Transcoded with FFmpeg (max 15 min); audio can be extracted via audio_convert. No video generation."
+  },
+  {
+   "id": "3gp",
+   "name": "3GP",
+   "category": "video",
+   "aliases": [
+    "3gp"
+   ],
+   "workflow": "video",
+   "worker": "video",
+   "dependencies": {
+    "apt": [
+     "ffmpeg"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "video_convert",
+     "targets": [
+      "mp4",
+      "webm",
+      "mov",
+      "mkv",
+      "m4v",
+      "avi",
+      "wmv",
+      "mpeg"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Transcoded with FFmpeg (max 15 min); audio can be extracted via audio_convert. No video generation."
+  },
+  {
+   "id": "zip",
+   "name": "ZIP",
+   "category": "archive",
+   "aliases": [
+    "zip"
+   ],
+   "workflow": "archives",
+   "worker": "archives",
+   "dependencies": {
+    "apt": [
+     "7zip"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "tar",
+     "tgz",
+     "txt"
+    ],
+    "convert_runtime": {
+     "op": "archive_convert",
+     "targets": [
+      "7z"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Listing/extraction checks paths, links, sizes and entry counts (ZIP-slip and bomb safe)."
+  },
+  {
+   "id": "tar",
+   "name": "TAR",
+   "category": "archive",
+   "aliases": [
+    "tar"
+   ],
+   "workflow": "archives",
+   "worker": "archives",
+   "dependencies": {
+    "apt": [
+     "7zip"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "zip",
+     "tgz",
+     "txt"
+    ],
+    "convert_runtime": {
+     "op": "archive_convert",
+     "targets": [
+      "7z"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "gz",
+   "name": "Gzip",
+   "category": "archive",
+   "aliases": [
+    "gz",
+    "gzip"
+   ],
+   "workflow": "archives",
+   "worker": "archives",
+   "dependencies": {
+    "apt": [
+     "7zip"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "zip",
+     "txt"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Decompressed with a size ceiling; gzip of a TAR is handled as TGZ."
+  },
+  {
+   "id": "tgz",
+   "name": "Tar.gz",
+   "category": "archive",
+   "aliases": [
+    "tgz",
+    "tar.gz"
+   ],
+   "workflow": "archives",
+   "worker": "archives",
+   "dependencies": {
+    "apt": [
+     "7zip"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "zip",
+     "tar",
+     "txt"
+    ],
+    "convert_runtime": {
+     "op": "archive_convert",
+     "targets": [
+      "7z"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "7z",
+   "name": "7-Zip",
+   "category": "archive",
+   "aliases": [
+    "7z"
+   ],
+   "workflow": "archives",
+   "worker": "archives",
+   "dependencies": {
+    "apt": [
+     "7zip"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "archive_convert",
+     "targets": [
+      "zip",
+      "tar",
+      "tgz"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Encrypted archives are refused."
+  },
+  {
+   "id": "rar",
+   "name": "RAR",
+   "category": "archive",
+   "aliases": [
+    "rar"
+   ],
+   "workflow": "archives",
+   "worker": "archives",
+   "dependencies": {
+    "apt": [
+     "7zip"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "archive_convert",
+     "targets": [
+      "zip",
+      "tar",
+      "tgz",
+      "7z"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "RAR is read-only (proprietary encoder); encrypted archives are refused."
+  },
+  {
+   "id": "srt",
+   "name": "SubRip",
+   "category": "subtitle",
+   "aliases": [
+    "srt"
+   ],
+   "workflow": "subtitles",
+   "worker": "subtitles",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "vtt",
+     "ass",
+     "ssa",
+     "lrc",
+     "txt",
+     "json"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "vtt",
+   "name": "WebVTT",
+   "category": "subtitle",
+   "aliases": [
+    "vtt"
+   ],
+   "workflow": "subtitles",
+   "worker": "subtitles",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "srt",
+     "ass",
+     "ssa",
+     "lrc",
+     "txt",
+     "json"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "ass",
+   "name": "Advanced SubStation",
+   "category": "subtitle",
+   "aliases": [
+    "ass"
+   ],
+   "workflow": "subtitles",
+   "worker": "subtitles",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "srt",
+     "vtt",
+     "ssa",
+     "lrc",
+     "txt",
+     "json"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Styling/positioning tags are dropped when converting to other formats."
+  },
+  {
+   "id": "ssa",
+   "name": "SubStation Alpha",
+   "category": "subtitle",
+   "aliases": [
+    "ssa"
+   ],
+   "workflow": "subtitles",
+   "worker": "subtitles",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "srt",
+     "vtt",
+     "ass",
+     "lrc",
+     "txt",
+     "json"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Styling tags are dropped when converting."
+  },
+  {
+   "id": "lrc",
+   "name": "LRC lyrics",
+   "category": "subtitle",
+   "aliases": [
+    "lrc"
+   ],
+   "workflow": "subtitles",
+   "worker": "subtitles",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "srt",
+     "vtt",
+     "ass",
+     "ssa",
+     "txt",
+     "json"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "LRC has start times only; end times are inferred from the next line."
+  },
+  {
+   "id": "mobi",
+   "name": "Mobipocket",
+   "category": "ebook",
+   "aliases": [
+    "mobi",
+    "prc"
+   ],
+   "workflow": "ebooks",
+   "worker": "ebooks",
+   "dependencies": {
+    "apt": [
+     "calibre",
+     "7zip"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "ebook_convert",
+     "targets": [
+      "epub",
+      "pdf",
+      "txt",
+      "azw3",
+      "docx",
+      "html",
+      "fb2"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "DRM-protected books cannot be converted."
+  },
+  {
+   "id": "azw3",
+   "name": "Kindle AZW3",
+   "category": "ebook",
+   "aliases": [
+    "azw3",
+    "azw"
+   ],
+   "workflow": "ebooks",
+   "worker": "ebooks",
+   "dependencies": {
+    "apt": [
+     "calibre",
+     "7zip"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "ebook_convert",
+     "targets": [
+      "epub",
+      "pdf",
+      "txt",
+      "mobi",
+      "docx",
+      "html",
+      "fb2"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "DRM-protected books cannot be converted."
+  },
+  {
+   "id": "fb2",
+   "name": "FictionBook",
+   "category": "ebook",
+   "aliases": [
+    "fb2"
+   ],
+   "workflow": "ebooks",
+   "worker": "ebooks",
+   "dependencies": {
+    "apt": [
+     "calibre",
+     "7zip"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md",
+     "html",
+     "pdf",
+     "docx",
+     "epub"
+    ],
+    "convert_runtime": {
+     "op": "ebook_convert",
+     "targets": [
+      "mobi",
+      "azw3"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "cbz",
+   "name": "Comic ZIP",
+   "category": "ebook",
+   "aliases": [
+    "cbz"
+   ],
+   "workflow": "ebooks",
+   "worker": "ebooks",
+   "dependencies": {
+    "apt": [
+     "calibre",
+     "7zip"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "pdf",
+     "zip"
+    ],
+    "convert_runtime": {
+     "op": "ebook_convert",
+     "targets": [
+      "epub"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "PDF output embeds JPEG/PNG pages only."
+  },
+  {
+   "id": "cbr",
+   "name": "Comic RAR",
+   "category": "ebook",
+   "aliases": [
+    "cbr"
+   ],
+   "workflow": "comics",
+   "worker": "archives",
+   "dependencies": {
+    "apt": [
+     "7zip"
+    ],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "archive_convert",
+     "targets": [
+      "cbz",
+      "zip"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "mmd",
+   "name": "Mermaid",
+   "category": "diagram",
+   "aliases": [
+    "mmd",
+    "mermaid"
+   ],
+   "workflow": "mermaid",
+   "worker": "diagrams",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "md",
+     "txt"
+    ],
+    "convert_runtime": {
+     "op": "render",
+     "targets": [
+      "svg",
+      "png",
+      "pdf"
+     ]
+    },
+    "render": true,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "dot",
+   "name": "Graphviz DOT",
+   "category": "diagram",
+   "aliases": [
+    "dot",
+    "gv"
+   ],
+   "workflow": "graphviz",
+   "worker": "diagrams",
+   "dependencies": {
+    "apt": [
+     "graphviz"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "json"
+    ],
+    "convert_runtime": {
+     "op": "render",
+     "targets": [
+      "svg",
+      "png",
+      "pdf"
+     ]
+    },
+    "render": true,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "drawio",
+   "name": "draw.io XML",
+   "category": "diagram",
+   "aliases": [
+    "drawio",
+    "dio"
+   ],
+   "workflow": "diagrams",
+   "worker": "diagrams",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "txt",
+     "dot",
+     "mmd"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Shapes/edges are extracted (compressed diagrams decoded); no headless draw.io renderer is available, render via the exported DOT/Mermaid."
+  },
+  {
+   "id": "puml",
+   "name": "PlantUML",
+   "category": "diagram",
+   "aliases": [
+    "puml",
+    "plantuml",
+    "pu"
+   ],
+   "workflow": "plantuml",
+   "worker": "diagrams",
+   "dependencies": {
+    "apt": [
+     "plantuml",
+     "graphviz"
+    ],
+    "pip": [
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "txt",
+     "md"
+    ],
+    "convert_runtime": {
+     "op": "render",
+     "targets": [
+      "svg",
+      "png",
+      "pdf"
+     ]
+    },
+    "render": true,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Rendered in PlantUML's sandbox security profile."
+  },
+  {
+   "id": "dxf",
+   "name": "AutoCAD DXF",
+   "category": "diagram",
+   "aliases": [
+    "dxf"
+   ],
+   "workflow": "cad",
+   "worker": "diagrams",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "ezdxf==1.4.2",
+     "matplotlib==3.10.5",
+     "pypdf==5.9.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "txt"
+    ],
+    "convert_runtime": {
+     "op": "render",
+     "targets": [
+      "svg",
+      "png",
+      "pdf"
+     ]
+    },
+    "render": true,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "ttf",
+   "name": "TrueType",
+   "category": "font",
+   "aliases": [
+    "ttf"
+   ],
+   "workflow": "fonts",
+   "worker": "fonts",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "fonttools==4.59.0",
+     "brotli==1.1.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "font_convert",
+     "targets": [
+      "woff",
+      "woff2"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "TTF\u2194OTF outline conversion is not offered (would alter glyphs)."
+  },
+  {
+   "id": "otf",
+   "name": "OpenType",
+   "category": "font",
+   "aliases": [
+    "otf"
+   ],
+   "workflow": "fonts",
+   "worker": "fonts",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "fonttools==4.59.0",
+     "brotli==1.1.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "font_convert",
+     "targets": [
+      "woff",
+      "woff2"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "woff",
+   "name": "WOFF",
+   "category": "font",
+   "aliases": [
+    "woff"
+   ],
+   "workflow": "fonts",
+   "worker": "fonts",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "fonttools==4.59.0",
+     "brotli==1.1.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [
+     "ttf",
+     "otf"
+    ],
+    "convert_runtime": {
+     "op": "font_convert",
+     "targets": [
+      "woff2"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Inline unwrap picks TTF or OTF by outline type."
+  },
+  {
+   "id": "woff2",
+   "name": "WOFF2",
+   "category": "font",
+   "aliases": [
+    "woff2"
+   ],
+   "workflow": "fonts",
+   "worker": "fonts",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "fonttools==4.59.0",
+     "brotli==1.1.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": true,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "font_convert",
+     "targets": [
+      "ttf",
+      "otf",
+      "woff"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "vcf",
+   "name": "vCard",
+   "category": "contact",
+   "aliases": [
+    "vcf",
+    "vcard"
+   ],
+   "workflow": "contacts",
+   "worker": "contacts",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "json",
+     "xlsx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "ics",
+   "name": "iCalendar",
+   "category": "calendar",
+   "aliases": [
+    "ics",
+    "ical"
+   ],
+   "workflow": "calendars",
+   "worker": "calendars",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "json",
+     "xlsx"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "kml",
+   "name": "KML",
+   "category": "geo",
+   "aliases": [
+    "kml"
+   ],
+   "workflow": "maps",
+   "worker": "maps",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0",
+     "pyshp==2.3.1"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "geojson",
+     "gpx",
+     "csv"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "gpx",
+   "name": "GPX",
+   "category": "geo",
+   "aliases": [
+    "gpx"
+   ],
+   "workflow": "maps",
+   "worker": "maps",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0",
+     "pyshp==2.3.1"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "geojson",
+     "kml",
+     "csv"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "geojson",
+   "name": "GeoJSON",
+   "category": "geo",
+   "aliases": [
+    "geojson"
+   ],
+   "workflow": "maps",
+   "worker": "maps",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0",
+     "pyshp==2.3.1"
+    ]
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "kml",
+     "gpx",
+     "csv"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "shp",
+   "name": "Shapefile (zipped)",
+   "category": "geo",
+   "aliases": [
+    "shp"
+   ],
+   "workflow": "maps",
+   "worker": "maps",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0",
+     "pyshp==2.3.1"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "data_convert",
+     "targets": [
+      "geojson"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": "Send as a .zip containing .shp/.shx/.dbf."
+  },
+  {
+   "id": "parquet",
+   "name": "Apache Parquet",
+   "category": "data",
+   "aliases": [
+    "parquet"
+   ],
+   "workflow": "data",
+   "worker": "data",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "data_convert",
+     "targets": [
+      "csv",
+      "json",
+      "avro",
+      "sqlite"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "avro",
+   "name": "Apache Avro",
+   "category": "data",
+   "aliases": [
+    "avro"
+   ],
+   "workflow": "data",
+   "worker": "data",
+   "dependencies": {
+    "apt": [],
+    "pip": [
+     "pyarrow==21.0.0",
+     "fastavro==1.12.0"
+    ]
+   },
+   "capabilities": {
+    "create": false,
+    "read": false,
+    "convert_inline": [],
+    "convert_runtime": {
+     "op": "data_convert",
+     "targets": [
+      "csv",
+      "json",
+      "parquet",
+      "sqlite"
+     ]
+    },
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "runtime-implemented",
+   "notes": null
+  },
+  {
+   "id": "log",
+   "name": "Log file",
+   "category": "log",
+   "aliases": [
+    "log"
+   ],
+   "workflow": "logs",
+   "worker": "logs",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "csv",
+     "json",
+     "txt",
+     "md"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Lines are split into time/level/message when recognisable."
+  },
+  {
+   "id": "diff",
+   "name": "Diff",
+   "category": "log",
+   "aliases": [
+    "diff"
+   ],
+   "workflow": "logs",
+   "worker": "logs",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "md",
+     "html",
+     "txt",
+     "patch"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": null
+  },
+  {
+   "id": "patch",
+   "name": "Patch",
+   "category": "log",
+   "aliases": [
+    "patch"
+   ],
+   "workflow": "logs",
+   "worker": "logs",
+   "dependencies": {
+    "apt": [],
+    "pip": []
+   },
+   "capabilities": {
+    "create": true,
+    "read": true,
+    "convert_inline": [
+     "json",
+     "md",
+     "html",
+     "txt",
+     "diff"
+    ],
+    "convert_runtime": null,
+    "render": false,
+    "checksum_runtime": true
+   },
+   "verification": "inline-only",
+   "notes": "Patches are summarised, never applied to the server."
+  }
+ ]
+}

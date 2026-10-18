@@ -1,19 +1,23 @@
 # Vision-Runtime
 
-Background execution runtime for VISION. The VISION backend dispatches `.github/workflows/terminal.yml` (file operations) or `.github/workflows/story.yml` (stories, code in `workers/story/index.py`)
-with only a job id and an operation name; the runner then:
+Background execution runtime for VISION. The backend dispatches one of **28 workflows**
+(`.github/workflows/<name>.yml`, generated from `registry/workflows.json`) with only a job id
+and operation. Each workflow installs only its worker's dependencies and runs
+`runtime/runner.py`, which:
 
-1. Gets a GitHub OIDC token (audience `vision-runtime-relay`).
-2. Claims the job at the VISION relay (Cloudflare Worker), which verifies the token is from
-   **this repo, this workflow file, the `main` branch, and a `workflow_dispatch` run**, and
-   binds the job to that run id (one claim per job).
-3. Downloads the input in chunks and checks size + SHA-256.
-4. Runs the operation from `runtime/operations.py` (the only allowed operations).
-5. Uploads the output in chunks and reports completion; VISION re-verifies the hash.
+1. Gets a GitHub OIDC token; the VISION relay verifies repo, workflow file, `main` and
+   `workflow_dispatch`, and only lets that workflow claim jobs routed to it.
+2. Downloads the input in chunks and checks size + SHA-256.
+3. Calls the routed worker (`workers/<worker>/index.py`, 18 total), which checks the operation
+   and format are in scope, runs the operation from `runtime/operations.py`, and verifies the
+   output signature.
+4. Uploads the output in chunks; VISION re-verifies the hash.
 
-No secrets are stored in this repo or passed to workflows. User files never go into
-workflow inputs, logs or GitHub artifacts (this repo is public, so logs only show job id,
-operation and stage).
+`registry/formats.json` maps all 121 canonical formats (18 categories) to workflow, worker,
+dependencies, capabilities and verification status (`runtime-implemented`, `inline-only`
+= handled in the Cloudflare Worker, or `unsupported`).
+
+No workflow runs on push or schedule. Tests: `python3 -m pytest -q tests` (run locally).
 
 ## Operations
 

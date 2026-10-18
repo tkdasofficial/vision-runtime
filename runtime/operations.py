@@ -191,7 +191,7 @@ def op_video_convert(inp, params, workdir):
 from runtime import format_ops as F  # noqa: E402
 
 def _story(inp, params, workdir):
-    from workers.story.index import run_story
+    from workers.documents.story import run_story
     return run_story(params, workdir, params.get("_progress"))
 
 

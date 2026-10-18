@@ -19,7 +19,9 @@ import urllib.error
 import urllib.request
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import importlib  # noqa: E402
 from runtime.operations import OpError, get  # noqa: E402
+from runtime.worker_base import WORKFLOWS  # noqa: E402
 
 RELAY = "https://vision.tusharkantidasofficial.workers.dev/runtime"
 CHUNK = 700_000
@@ -58,6 +60,10 @@ def main() -> int:
     if not ID_RE.match(job_id):
         log("invalid job id"); return 2
     op = get(op_id)  # rejects anything not registered
+    wf = WORKFLOWS.get(os.environ.get("WORKFLOW", ""))
+    if not wf or op_id not in wf["ops"] or wf["worker"] != os.environ.get("WORKER"):
+        log("operation not routed to this workflow"); return 2
+    worker = importlib.import_module(f"workers.{wf['worker']}.index")
     claim = json.loads(http("POST", f"{RELAY}/claim", oidc_token(), json.dumps({"job_id": job_id}).encode()))
     sess = claim["session"]
     print(f"::add-mask::{sess}", flush=True)
@@ -85,7 +91,7 @@ def main() -> int:
         http("POST", f"{RELAY}/progress", sess, json.dumps({"stage": "processing"}).encode())
         params = dict(claim.get("params") or {}); params["_timeout"] = op.timeout_s
         params["_progress"] = lambda stage: http("POST", f"{RELAY}/progress", sess, json.dumps({"stage": stage}).encode())
-        res = op.run(inp, params, work)
+        res = worker.run(op_id, inp, params, work, (claim.get("input") or {}).get("name"))
         output = None
         if res.get("output"):
             http("POST", f"{RELAY}/progress", sess, json.dumps({"stage": "validating_output"}).encode())

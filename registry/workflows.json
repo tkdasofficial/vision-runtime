@@ -1,0 +1,376 @@
+{
+ "documents": {
+  "worker": "documents",
+  "ops": [
+   "office_convert",
+   "checksum"
+  ],
+  "sources": [
+   "doc",
+   "docx",
+   "odt",
+   "rtf",
+   "txt",
+   "html",
+   "md",
+   "pdf"
+  ]
+ },
+ "story": {
+  "worker": "documents",
+  "ops": [
+   "story_generate"
+  ]
+ },
+ "tex": {
+  "worker": "documents",
+  "ops": [
+   "render",
+   "checksum"
+  ],
+  "sources": [
+   "tex"
+  ]
+ },
+ "spreadsheets": {
+  "worker": "spreadsheets",
+  "ops": [
+   "office_convert",
+   "checksum"
+  ],
+  "sources": [
+   "xls",
+   "xlsx",
+   "ods",
+   "csv",
+   "tsv"
+  ]
+ },
+ "data": {
+  "worker": "data",
+  "ops": [
+   "data_convert",
+   "checksum"
+  ],
+  "sources": [
+   "parquet",
+   "avro",
+   "csv",
+   "json",
+   "jsonl",
+   "xml",
+   "sql"
+  ]
+ },
+ "sqlite": {
+  "worker": "data",
+  "ops": [
+   "data_convert",
+   "checksum"
+  ],
+  "sources": [
+   "sqlite",
+   "db"
+  ]
+ },
+ "presentations": {
+  "worker": "presentations",
+  "ops": [
+   "office_convert",
+   "checksum"
+  ],
+  "sources": [
+   "ppt",
+   "pptx",
+   "odp"
+  ]
+ },
+ "code": {
+  "worker": "code",
+  "ops": [
+   "checksum"
+  ],
+  "sources": [
+   "css",
+   "js",
+   "jsx",
+   "ts",
+   "tsx",
+   "mjs",
+   "cjs",
+   "py",
+   "java",
+   "c",
+   "cpp",
+   "h",
+   "hpp",
+   "cs",
+   "go",
+   "rs",
+   "php",
+   "rb",
+   "swift",
+   "kt",
+   "kts",
+   "sh",
+   "bat",
+   "ps1",
+   "ipynb"
+  ]
+ },
+ "config": {
+  "worker": "config",
+  "ops": [
+   "checksum"
+  ],
+  "sources": [
+   "yaml",
+   "yml",
+   "toml",
+   "env",
+   "ini",
+   "cfg",
+   "conf",
+   "properties",
+   "dockerfile",
+   "gitignore"
+  ]
+ },
+ "images": {
+  "worker": "images",
+  "ops": [
+   "image_convert",
+   "checksum"
+  ],
+  "sources": [
+   "png",
+   "jpg",
+   "jpeg",
+   "webp",
+   "bmp",
+   "tiff",
+   "tif",
+   "gif",
+   "ico",
+   "avif",
+   "heic",
+   "heif"
+  ]
+ },
+ "vector": {
+  "worker": "diagrams",
+  "ops": [
+   "render",
+   "checksum"
+  ],
+  "sources": [
+   "svg"
+  ]
+ },
+ "audio": {
+  "worker": "audio",
+  "ops": [
+   "audio_convert",
+   "checksum"
+  ],
+  "sources": [
+   "wav",
+   "mp3",
+   "flac",
+   "ogg",
+   "m4a",
+   "aac",
+   "wma",
+   "opus",
+   "aiff",
+   "aif"
+  ]
+ },
+ "video": {
+  "worker": "video",
+  "ops": [
+   "video_convert",
+   "checksum"
+  ],
+  "sources": [
+   "mp4",
+   "webm",
+   "mov",
+   "mkv",
+   "avi",
+   "wmv",
+   "m4v",
+   "mpeg",
+   "mpg",
+   "3gp"
+  ]
+ },
+ "archives": {
+  "worker": "archives",
+  "ops": [
+   "archive_convert",
+   "checksum"
+  ],
+  "sources": [
+   "zip",
+   "tar",
+   "gz",
+   "tgz",
+   "7z",
+   "rar"
+  ]
+ },
+ "comics": {
+  "worker": "archives",
+  "ops": [
+   "archive_convert",
+   "checksum"
+  ],
+  "sources": [
+   "cbz",
+   "cbr"
+  ]
+ },
+ "subtitles": {
+  "worker": "subtitles",
+  "ops": [
+   "checksum"
+  ],
+  "sources": [
+   "srt",
+   "vtt",
+   "ass",
+   "ssa",
+   "lrc"
+  ]
+ },
+ "ebooks": {
+  "worker": "ebooks",
+  "ops": [
+   "ebook_convert",
+   "checksum"
+  ],
+  "sources": [
+   "epub",
+   "mobi",
+   "azw3",
+   "fb2"
+  ]
+ },
+ "diagrams": {
+  "worker": "diagrams",
+  "ops": [
+   "checksum"
+  ],
+  "sources": [
+   "drawio",
+   "dio"
+  ]
+ },
+ "mermaid": {
+  "worker": "diagrams",
+  "ops": [
+   "render",
+   "checksum"
+  ],
+  "sources": [
+   "mmd",
+   "mermaid"
+  ]
+ },
+ "graphviz": {
+  "worker": "diagrams",
+  "ops": [
+   "render",
+   "checksum"
+  ],
+  "sources": [
+   "dot",
+   "gv"
+  ]
+ },
+ "plantuml": {
+  "worker": "diagrams",
+  "ops": [
+   "render",
+   "checksum"
+  ],
+  "sources": [
+   "puml",
+   "plantuml"
+  ]
+ },
+ "cad": {
+  "worker": "diagrams",
+  "ops": [
+   "render",
+   "checksum"
+  ],
+  "sources": [
+   "dxf"
+  ]
+ },
+ "fonts": {
+  "worker": "fonts",
+  "ops": [
+   "font_convert",
+   "checksum"
+  ],
+  "sources": [
+   "ttf",
+   "otf",
+   "woff",
+   "woff2"
+  ]
+ },
+ "maps": {
+  "worker": "maps",
+  "ops": [
+   "data_convert",
+   "checksum"
+  ],
+  "sources": [
+   "shp",
+   "geojson",
+   "kml",
+   "gpx"
+  ]
+ },
+ "contacts": {
+  "worker": "contacts",
+  "ops": [
+   "checksum"
+  ],
+  "sources": [
+   "vcf",
+   "vcard"
+  ]
+ },
+ "calendars": {
+  "worker": "calendars",
+  "ops": [
+   "checksum"
+  ],
+  "sources": [
+   "ics",
+   "ical"
+  ]
+ },
+ "logs": {
+  "worker": "logs",
+  "ops": [
+   "checksum"
+  ],
+  "sources": [
+   "log",
+   "diff",
+   "patch"
+  ]
+ },
+ "terminal": {
+  "worker": "logs",
+  "ops": [
+   "checksum"
+  ]
+ }
+}
