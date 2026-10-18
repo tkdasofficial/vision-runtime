@@ -10,7 +10,7 @@ SPEC = {"count": 3, "noun": "prompt", "multi": True, "sections": P.DEFAULT_SECTI
 def plan(n):
     return {"blueprint": "b" * 300, "bible": BIBLE, "initial_state": {"mira.umbrella": "closed"},
             "clues": [{"name": "brass lantern", "setup": 1, "payoff": n}],
-            "outline": [{"index": i, "moment": f"m{i}", "time": f"0{i}:00", "location": "street", "characters": ["Mira"], "before": {}, "after": {}} for i in range(1, n + 1)]}
+            "outline": [{"index": i, "moment": f"m{i}", "time": f"D1 0{i}:00", "location": "street", "characters": ["Mira"], "before": {}, "after": {}} for i in range(1, n + 1)]}
 def unit(i, desc=BIBLE["characters"]["Mira"], extra=""):
     body = "\n".join(f"## {f}\n{f} details" for f in P.DEFAULT_SECTIONS)
     return f"# Prompt {i}: t\n{body}\nMira is {desc}. {BIBLE['style']}. {BIBLE['negative']}. {extra}" + "x" * 200
@@ -65,3 +65,19 @@ def test_canonical_header_and_blueprint_strip():
     out = P.canonical_header("# Scene 3: The Door\n## Master Story Blueprint\nblah\n# Scene 3\n## Character Details\nx", 3, {"multi": True, "noun": "scene"})
     assert out.startswith("# Scene 3: The Door") and out.count("# Scene 3") == 1
     assert "blah" not in out and "## Character Details" in out
+
+def test_locks_never_duplicate():
+    p = plan(3); t = P.enforce_locks(unit(2), 2, p, SPEC)
+    assert P.enforce_locks(t, 2, p, SPEC) == t
+
+def test_language_rules():
+    spec = {"devanagari": True}
+    assert P.language_issues("## Dialogue\nमीरा: यह गलत है\n## Camera\nwide shot", spec) == []
+    assert P.language_issues("## Dialogue\nमीरा: गलत-way-round (głos tremulous)", spec)
+    assert P.language_issues("## Camera\nयह\nयह\nयह", spec)
+
+def test_fact_ledger_compared_by_code(monkeypatch):
+    p = plan(2); p["outline"][0]["end_positions"] = {"Mira": "foyer"}; p["outline"][0]["end_props"] = {"knife": "Mira"}
+    monkeypatch.setattr(P, "AUDIT_CALL", lambda *a, **k: '{"end_positions":{"Mira":"basement"},"end_props":{"knife":"Mira"},"unexplained_moves":[]}')
+    out = P.fact_issues("text", 1, p)
+    assert len(out) == 1 and "basement" in out[0]

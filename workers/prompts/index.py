@@ -56,7 +56,7 @@ def _post(url: str, key: str, payload: dict) -> str:
     return re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
 
 
-def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False) -> str:
+def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False, think: bool = False) -> str:
     """NVIDIA first, Groq fallback; one bounded retry per provider on transient errors only."""
     order = ((NVIDIA_URL, "NVIDIA_API_KEY", NVIDIA_MODEL), (GROQ_URL, "GROQ_API_KEY", GROQ_MODEL))
     if json_mode:  # structured steps (plan, reviews, audits) go to the stronger, faster JSON follower first
@@ -71,9 +71,9 @@ def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False
                 payload = {"model": model, "messages": messages, "temperature": 0.4, "max_tokens": max_tokens}
                 # Speed: hidden reasoning is off — the plan, deterministic gate and independent audit do the checking.
                 if model == NVIDIA_MODEL:
-                    payload["chat_template_kwargs"] = {"enable_thinking": False}
+                    payload["chat_template_kwargs"] = {"enable_thinking": think}
                 else:
-                    payload["reasoning_effort"] = "low"
+                    payload["reasoning_effort"] = "medium" if think else "low"
                 if json_mode:
                     payload["response_format"] = {"type": "json_object"}
                 t = time.time()
@@ -106,8 +106,11 @@ def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False
 CALL: Callable[..., str] = provider_call  # tests/benchmarks swap this
 
 
-def _ai(messages, max_tokens, json_mode=False):
-    return CALL(messages, max_tokens, json_mode)
+def _ai(messages, max_tokens, json_mode=False, think=False):
+    try:
+        return CALL(messages, max_tokens, json_mode, think)
+    except TypeError:  # simple test doubles
+        return CALL(messages, max_tokens, json_mode)
 
 
 def auditor_call(messages, max_tokens, json_mode=False):
@@ -250,6 +253,19 @@ def normalize_plan(plan, count: int):
         for key in ("time", "location"):
             if not isinstance(beat.get(key), str) or not beat[key].strip():
                 beat[key] = plan["outline"][i - 2].get(key, "") if i > 1 and isinstance(plan["outline"][i - 2], dict) else ""
+    pos = dict(plan.get("start_positions") or {}) if isinstance(plan.get("start_positions"), dict) else {}
+    props = dict(plan.get("start_props") or {}) if isinstance(plan.get("start_props"), dict) else {}
+    pos = {resolve(k) or k: str(v) for k, v in pos.items()}
+    for beat in plan["outline"]:
+        if not isinstance(beat, dict):
+            continue
+        beat["start_positions"], beat["start_props"] = dict(pos), dict(props)
+        ep = beat.get("end_positions") if isinstance(beat.get("end_positions"), dict) else {}
+        pos.update({resolve(k) or k: str(v) for k, v in ep.items()})
+        beat["end_positions"] = dict(pos)
+        pr = beat.get("end_props") if isinstance(beat.get("end_props"), dict) else {}
+        props.update({str(k): str(v) for k, v in pr.items()})
+        beat["end_props"] = dict(props)
     clues = plan.get("clues") if isinstance(plan.get("clues"), list) else []
     fixed = []
     for c in clues:
@@ -307,6 +323,16 @@ def validate_plan(plan, count: int) -> list[str]:
                 issues += [f"Unit {i} precondition does not follow prior state: {f}" for f, v in facts.items() if state.get(f) != v]
             else:
                 state.update(facts)
+    last = (0, 0)
+    for i, beat in enumerate(outline, 1):
+        m = re.match(r"^\s*D(?:ay)?\s*(\d+)\D+(\d{1,2}):(\d{2})", str(beat.get("time", "")) if isinstance(beat, dict) else "", re.I)
+        if count > 1 and not m:
+            issues.append(f"Unit {i} time must be 'D<day> HH:MM'"); continue
+        if m:
+            t = (int(m.group(1)), int(m.group(2)) * 60 + int(m.group(3)))
+            if t < last:
+                issues.append(f"Unit {i} time goes backwards")
+            last = t
     clues = plan.get("clues")
     if count > 1:
         if not isinstance(clues, list) or not clues:
@@ -368,6 +394,63 @@ def check_unit(text: str, index: int, plan: dict, spec: dict) -> list[str]:
     return problems
 
 
+_FOREIGN = re.compile(r"[A-Za-z]*[\u00C0-\u024F]+[A-Za-z]*")
+_HYBRID = re.compile(r"[\u0900-\u097F]+[-\u2011]?[A-Za-z]+|[A-Za-z]+[-\u2011]?[\u0900-\u097F]+")
+
+
+def language_issues(text: str, spec: dict) -> list[str]:
+    """Deterministic: no accented foreign Latin words; no Devanagari/Latin hybrids; Devanagari only in dialogue."""
+    out = []
+    bad = {w for w in _FOREIGN.findall(text) if w.lower() not in ("café", "naïve")}
+    if bad:
+        out.append("foreign-language words: " + ", ".join(sorted(bad)[:5]))
+    if spec.get("devanagari"):
+        if _HYBRID.search(text):
+            out.append("Hindi dialogue mixes Latin letters into Devanagari words")
+        section, outside = "", 0
+        for line in text.splitlines():
+            if re.match(r"^\s*#{1,3}\s", line):
+                section = line.lower()
+            elif re.search(r"[\u0900-\u097F]{2,}", line) and "dialog" not in section:
+                outside += 1
+        if outside > 2:
+            out.append("Devanagari used outside the Dialogue section")
+    return out
+
+
+EXTRACT_SYS = """Read the scene and report facts as JSON only:
+{"end_positions":{"Name":"one id from locations, or 'unknown'"},"end_props":{"prop":"holder name or one location id, or 'unknown'"},"unexplained_moves":["Name"]}
+end_* = where each listed character/prop is when the scene ENDS. unexplained_moves = characters who appear in a new place without being shown moving."""
+
+
+def fact_issues(text: str, i: int, plan: dict) -> list[str]:
+    """Independent extraction compared deterministically with the plan's ledger (the model only reads; code judges)."""
+    c = plan["outline"][i - 1]
+    want_pos, want_props = c.get("end_positions") or {}, c.get("end_props") or {}
+    if not want_pos and not want_props:
+        return []
+    try:
+        got = parse_json(AUDIT_CALL([{"role": "system", "content": EXTRACT_SYS},
+                                     {"role": "user", "content": json.dumps({"locations": plan.get("locations"), "characters": list(want_pos),
+                                      "props": list(want_props), "scene": text[:14000]}, ensure_ascii=False)}], 800, True))
+    except Exception:
+        return []  # extractor unavailable: not evidence of a defect
+    out = []
+    same = lambda a, b: _norm(str(a)) == _norm(str(b)) or _norm(str(a)) in _norm(str(b)) or _norm(str(b)) in _norm(str(a))
+    for n, loc in want_pos.items():
+        g = (got.get("end_positions") or {}).get(n)
+        if g and g != "unknown" and not same(g, loc):
+            out.append(f"{n} must end at {loc}, scene leaves them at {g}")
+    for k, v in want_props.items():
+        g = (got.get("end_props") or {}).get(k)
+        if g and g != "unknown" and not same(g, v):
+            out.append(f"{k} must end with/at {v}, scene shows {g}")
+    for n in got.get("unexplained_moves") or []:
+        if isinstance(n, str):
+            out.append(f"{n} changes place without being shown moving")
+    return out
+
+
 def validate_review(review) -> list[str]:
     if not isinstance(review, dict):
         return ["Review must be an object"]
@@ -384,7 +467,7 @@ def deterministic_score(units: list[str], plan: dict, spec: dict) -> int:
     for i, text in enumerate(units, 1):
         n_checks = len(spec["sections"]) + 2 + len(plan["outline"][i - 1].get("characters", [])) + len(plan["outline"][i - 1].get("after") or {}) + 2
         total += n_checks
-        passed += max(0, n_checks - len(check_unit(text, i, plan, spec)))
+        passed += max(0, n_checks - len(check_unit(text, i, plan, spec)) - len(language_issues(text, spec)))
     return round(100 * passed / total) if total else 0
 
 
@@ -395,10 +478,14 @@ locations, supernatural/world rules, important props, timeline, mysteries, recur
 
 PLAN_SYS = SYSTEM + """ Turn the given blueprint into a compact plan. Return JSON only (no Markdown inside):
 {"bible":{"characters":{"Name":"locked visual descriptor, 20-40 words: age, face, hair, build, exact clothing"},"style":"ONE locked cinematic style line","negative":"ONE locked negative-constraints line"},
+"locations":["short location id, e.g. foyer"],
+"start_positions":{"Name":"location id at the start of unit 1"},
+"start_props":{"prop name":"holder name or location id at the start of unit 1"},
 "initial_state":{"entity.field":"short value"},
 "clues":[{"name":"short clue name","setup":1,"payoff":10}],
-"outline":[{"index":1,"moment":"what happens","time":"HH:MM","location":"place","characters":["Name"],"props_in_play":["prop: who holds it / where"],"injuries":["Name: injury (cause, unit)"],"clues_planted":["clue name"],"clues_paid":["clue name"],"before":{"entity.field":"value"},"after":{"entity.field":"new short value"}}]}
-Exactly N outline items. Times never go backwards and gaps are explained. Every prop or injury exists only from the unit that causes it;
+"outline":[{"index":1,"moment":"what happens","time":"D1 22:00","location":"location id","end_positions":{"Name":"location id at unit end (EVERY character)"},"end_props":{"prop name":"holder or location id at unit end (EVERY tracked prop)"},"characters":["Name"],"props_in_play":["prop: who holds it / where"],"injuries":["Name: injury (cause, unit)"],"clues_planted":["clue name"],"clues_paid":["clue name"],"before":{"entity.field":"value"},"after":{"entity.field":"new short value"}}]}
+Exactly N outline items. time is 'D<day> HH:MM' and never goes backwards. A character's start position is their previous end position; anyone who moves must be shown moving.
+Times never go backwards and gaps are explained. Every prop or injury exists only from the unit that causes it;
 a dropped/lost prop stays dropped until a unit recovers it. Every clue planted is paid off in a later unit (final unit resolves the mystery). Each unit advances one causal step; every 'before' equals the state left by earlier units.
 Track props' locations, injuries, knowledge and clues as state keys. Values are 1-4 word phrases. Seed clues early and pay them off at the end."""
 
@@ -420,9 +507,12 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
            f"Use these sections as '## ' headings, in order: {'; '.join(spec['sections'])}. "
            "Keep every character exactly as the bible describes (the worker inserts the locked descriptors itself). Start from the 'before' state, end at the 'after' state; never reveal later units. "
            "Use ONLY the contract's time, location, props_in_play and injuries: invent no new props, wounds, events or locations. "
+           "Characters begin at start_positions and finish at end_positions; anyone who changes place is SHOWN moving. Props begin at start_props and end at end_props. "
+           "Characters not in this unit's cast stay off-screen where start_positions says. "
            "Name each planted/paid clue exactly. Do not repeat the blueprint. The ending must lead directly into next_unit.")
     if spec["devanagari"]:
-        sys += " Dialogue lines are in natural Hindi using Devanagari script; everything else in English."
+        sys += (" Dialogue lines are pure natural Hindi in Devanagari only (no Latin letters, no words from other languages); "
+                "delivery notes in parentheses are plain English. Everything outside dialogue is plain English with no other languages.")
     ctx = {"brief": brief, "bible": plan["bible"], "blueprint": plan["blueprint"],
            "clues": plan.get("clues"), "outline": [{"index": o["index"], "moment": o["moment"], "time": o.get("time")} for o in plan["outline"]],
            "previous_unit": plan["outline"][i - 2] if i > 1 else None, "contract": c,
@@ -437,6 +527,8 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
 
 
 def _insert_after_heading(text: str, words: tuple, block: str) -> str:
+    if block.splitlines()[0] in text:  # already stamped (e.g. a repaired draft): never duplicate
+        return text
     lines = text.splitlines()
     for n, line in enumerate(lines):
         if re.match(r"^\s*(?:#{1,6}\s+|\*\*|\d{1,2}[.)]\s)", line) and all(w in line.lower() for w in words):
@@ -462,19 +554,25 @@ def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
     b, c = plan["bible"], plan["outline"][i - 1]
     cast = c.get("characters", [])
     if cast:
-        chars = "\n".join(f"- **{n} (locked appearance):** {b['characters'][n]}" for n in cast)
-        text = _insert_after_heading(text, ("character",), chars)
+        chars = "\n".join(f"- **{n} (locked appearance):** {b['characters'][n]}" for n in cast
+                           if f"**{n} (locked appearance):**" not in text)
+        if chars:
+            text = _insert_after_heading(text, ("character",), chars)
     text = _insert_after_heading(text, ("visual",), f"**Locked style:** {b['style']}")
     text = _insert_after_heading(text, ("negative",), f"**Locked negative:** {b['negative']}")
     state = [f"- {k}: {v}" for k, v in (c.get("after") or {}).items()]
+    state += [f"- {n} ends at: {v}" for n, v in (c.get("end_positions") or {}).items()]
+    state += [f"- {k} is with/at: {v}" for k, v in (c.get("end_props") or {}).items()]
     where = f"- Time: {c.get('time', '')} | Location: {c.get('location', '')}"
     text = _insert_after_heading(text, ("continuity",), "**Canonical state at scene end:**\n" + "\n".join([where] + state))
     return text
 
 
 def _write_and_check(i, plan, spec, brief, fix=None, draft=None, neighbours=None):
-    text = enforce_locks(canonical_header(_ai(_unit_messages(i, plan, spec, brief, fix, draft, neighbours), 9000), i, spec), i, plan, spec)
-    problems = check_unit(text, i, plan, spec)
+    text = enforce_locks(canonical_header(_ai(_unit_messages(i, plan, spec, brief, fix, draft, neighbours), 12000, False, True), i, spec), i, plan, spec)
+    problems = check_unit(text, i, plan, spec) + language_issues(text, spec)
+    if not problems and spec["multi"]:
+        problems = fact_issues(text, i, plan)
     if problems:
         print(f"[prompts] unit {i} gate: " + " | ".join(p.split(':')[0][:40] for p in problems[:5]), flush=True)
     return i, text, problems
@@ -628,7 +726,8 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
     if spec["story"] and isinstance(plan.get("story"), str) and plan["story"].strip():
         blocks.append(fence("# Story\n\n" + plan["story"].strip()))
     if spec["multi"]:
-        blocks.append(fence("# Master Story Blueprint\n\n" + plan["blueprint"].strip() + "\n\n" + bible_md))
+        bp = re.sub(r"^\s*#{1,3}\s*master story blueprint\s*\n", "", plan["blueprint"].strip(), flags=re.I)
+        blocks.append(fence("# Master Story Blueprint\n\n" + bp.strip() + "\n\n" + bible_md))
     blocks += [fence(s) if spec["multi"] else s.strip() for s in series]
     document = "\n\n".join(blocks) + "\n"
     say("assembling")
