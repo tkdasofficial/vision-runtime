@@ -73,16 +73,20 @@ def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False
                     payload["reasoning_effort"] = "low"
                 if json_mode:
                     payload["response_format"] = {"type": "json_object"}
+                t = time.time()
                 text = _post(url, key, payload)
+                print(f"[prompts] call {model.split('/')[-1]} {round(time.time() - t)}s chars={len(text)}", flush=True)
                 if text:
                     return text
                 last = "empty response"
             except urllib.error.HTTPError as e:
                 last = f"provider HTTP {e.code}"
+                print(f"[prompts] call {model.split('/')[-1]} HTTP {e.code}", flush=True)
                 if e.code not in (429,) and e.code < 500:
                     break
-            except Exception:
+            except Exception as e:
                 last = "provider unreachable"
+                print(f"[prompts] call {model.split('/')[-1]} failed {type(e).__name__}", flush=True)
             time.sleep(2 * (attempt + 1))
     raise OpError(f"The AI providers could not complete this step ({last}).")
 
@@ -173,7 +177,7 @@ def _facts(d) -> bool:
 def normalize_plan(plan, count: int):
     """Deterministic repairs of bookkeeping slips so a sound plan is not rejected for them:
     'before' maps are recomputed from the running state, string indexes become ints, clue units are coerced."""
-    if not isinstance(plan, dict) or not isinstance(plan.get("outline"), list):
+    if not isinstance(plan, dict):
         return plan
 
     def flat(v):
@@ -184,7 +188,13 @@ def normalize_plan(plan, count: int):
         if isinstance(v, dict):
             return ", ".join(flat(x) for k, x in v.items() if k.lower() not in ("name", "role") and flat(x))
         return str(v) if v is not None else ""
+    for wrap in ("plan", "result", "data", "output"):
+        if isinstance(plan.get(wrap), dict) and "outline" in plan[wrap]:
+            plan.update(plan.pop(wrap))
     bible = plan.get("bible") if isinstance(plan.get("bible"), dict) else {}
+    for key in ("characters", "style", "negative"):  # models sometimes put the locks at the top level
+        if key not in bible and key in plan:
+            bible[key] = plan[key]
     chars = bible.get("characters")
     if isinstance(chars, list):  # [{"name": "...", "descriptor": ...}] -> {"name": "descriptor"}
         chars = {str(c.get("name")): c for c in chars if isinstance(c, dict) and c.get("name")}
@@ -196,6 +206,8 @@ def normalize_plan(plan, count: int):
     plan["bible"] = bible
     if not isinstance(plan.get("blueprint"), str) and plan.get("blueprint") is not None:
         plan["blueprint"] = json.dumps(plan["blueprint"], ensure_ascii=False, indent=1)
+    if not isinstance(plan.get("outline"), list):
+        return plan
     state = {k: str(v) for k, v in (plan.get("initial_state") or {}).items()} if isinstance(plan.get("initial_state"), dict) else {}
     plan["initial_state"] = dict(state)
     for i, beat in enumerate(plan["outline"], 1):
@@ -227,7 +239,13 @@ def validate_plan(plan, count: int) -> list[str]:
     if not isinstance(plan, dict):
         return ["Plan must be an object"]
     issues = []
+    for wrap in ("plan", "result", "data", "output"):
+        if isinstance(plan.get(wrap), dict) and "outline" in plan[wrap]:
+            plan.update(plan.pop(wrap))
     bible = plan.get("bible") if isinstance(plan.get("bible"), dict) else {}
+    for key in ("characters", "style", "negative"):  # models sometimes put the locks at the top level
+        if key not in bible and key in plan:
+            bible[key] = plan[key]
     chars = bible.get("characters")
     if not isinstance(chars, dict) or not chars or not _facts(chars):
         issues.append("Bible characters must map each name to a locked visual descriptor")
@@ -433,7 +451,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                 problems = validate_plan(plan, count)
             except (ValueError, TypeError):
                 problems = ["Invalid planning JSON"]
-            print(f"[prompts] plan attempt problems={len(problems)} first={problems[0][:60] if problems else ''} shape={type((plan.get('bible') or {}).get('characters')).__name__ if isinstance(plan, dict) else '-'}", flush=True)
+            print(f"[prompts] plan attempt problems={len(problems)} first={problems[0][:60] if problems else ''} keys={sorted(plan)[:12] if isinstance(plan, dict) else '-'} bible={sorted(plan.get('bible') or {})[:8] if isinstance(plan, dict) and isinstance(plan.get('bible'), dict) else '-'}", flush=True)
             if not problems:
                 ck["plan"] = plan; save(); break
         if not ck["plan"]:
