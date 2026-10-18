@@ -170,6 +170,38 @@ def _facts(d) -> bool:
     return isinstance(d, dict) and all(isinstance(k, str) and isinstance(v, str) and k.strip() and v.strip() for k, v in d.items())
 
 
+def normalize_plan(plan, count: int):
+    """Deterministic repairs of bookkeeping slips so a sound plan is not rejected for them:
+    'before' maps are recomputed from the running state, string indexes become ints, clue units are coerced."""
+    if not isinstance(plan, dict) or not isinstance(plan.get("outline"), list):
+        return plan
+    state = {k: str(v) for k, v in (plan.get("initial_state") or {}).items()} if isinstance(plan.get("initial_state"), dict) else {}
+    plan["initial_state"] = dict(state)
+    for i, beat in enumerate(plan["outline"], 1):
+        if not isinstance(beat, dict):
+            continue
+        beat["index"] = i
+        before = beat.get("before") if isinstance(beat.get("before"), dict) else {}
+        beat["before"] = {k: state[k] for k in before if k in state}
+        after = beat.get("after") if isinstance(beat.get("after"), dict) else {}
+        beat["after"] = {str(k): str(v) for k, v in after.items() if str(v).strip()}
+        state.update(beat["after"])
+        for key in ("time", "location"):
+            if not isinstance(beat.get(key), str) or not beat[key].strip():
+                beat[key] = plan["outline"][i - 2].get(key, "") if i > 1 and isinstance(plan["outline"][i - 2], dict) else ""
+    clues = plan.get("clues") if isinstance(plan.get("clues"), list) else []
+    fixed = []
+    for c in clues:
+        try:
+            c = {"name": str(c["name"]), "setup": int(c["setup"]), "payoff": int(c["payoff"])}
+        except (KeyError, TypeError, ValueError):
+            continue
+        if 1 <= c["setup"] < c["payoff"] <= count:
+            fixed.append(c)
+    plan["clues"] = fixed
+    return plan
+
+
 def validate_plan(plan, count: int) -> list[str]:
     if not isinstance(plan, dict):
         return ["Plan must be an object"]
@@ -376,9 +408,11 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
             try:
                 plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS},
                                        {"role": "user", "content": json.dumps({"brief": brief, "N": count, "repair": problems}, ensure_ascii=False)}], 12000, True))
+                plan = normalize_plan(plan, count)
                 problems = validate_plan(plan, count)
             except (ValueError, TypeError):
                 problems = ["Invalid planning JSON"]
+            print(f"[prompts] plan attempt problems={len(problems)} first={problems[0][:60] if problems else ''}", flush=True)
             if not problems:
                 ck["plan"] = plan; save(); break
         if not ck["plan"]:
