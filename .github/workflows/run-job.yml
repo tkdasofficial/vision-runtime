@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       job_id: { description: "VISION job id (UUID)", required: true, type: string }
-      operation: { description: "Registered operation", required: true, type: choice, options: [checksum, image_convert, video_convert, audio_convert, office_convert, data_convert, archive_convert, ebook_convert, font_convert, render] }
+      operation: { description: "Registered operation", required: true, type: choice, options: [checksum, image_convert, video_convert, audio_convert, office_convert, data_convert, archive_convert, ebook_convert, font_convert, render, story_generate] }
 
 permissions:
   contents: read
@@ -20,7 +20,7 @@ jobs:
   run:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { persist-credentials: false }
@@ -46,4 +46,6 @@ jobs:
         env:
           JOB_ID: ${{ inputs.job_id }}
           OPERATION: ${{ inputs.operation }}
+          NVIDIA_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.NVIDIA_API_KEY || '' }}
+          GROQ_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.GROQ_API_KEY || '' }}
         run: python3 runtime/runner.py
