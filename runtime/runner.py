@@ -84,6 +84,7 @@ def main() -> int:
                 raise OpError("Input file failed its integrity check.")
         http("POST", f"{RELAY}/progress", sess, json.dumps({"stage": "processing"}).encode())
         params = dict(claim.get("params") or {}); params["_timeout"] = op.timeout_s
+        params["_progress"] = lambda stage: http("POST", f"{RELAY}/progress", sess, json.dumps({"stage": stage}).encode())
         res = op.run(inp, params, work)
         output = None
         if res.get("output"):
