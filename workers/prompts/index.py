@@ -66,7 +66,7 @@ def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False
         raise OpError("No AI provider key is configured on the runner.")
     last = "no provider succeeded"
     for url, key, model in providers:
-        for attempt in range(2):
+        for attempt in range(3):
             try:
                 payload = {"model": model, "messages": messages, "temperature": 0.4, "max_tokens": max_tokens}
                 # Speed: hidden reasoning is off — the plan, deterministic gate and independent audit do the checking.
@@ -85,7 +85,14 @@ def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False
             except urllib.error.HTTPError as e:
                 last = f"provider HTTP {e.code}"
                 print(f"[prompts] call {model.split('/')[-1]} HTTP {e.code}", flush=True)
-                if e.code not in (429,) and e.code < 500:
+                if e.code == 429:
+                    try:
+                        wait = float(e.headers.get("retry-after") or 0)
+                    except (TypeError, ValueError):
+                        wait = 0
+                    time.sleep(min(max(wait, 5 * (attempt + 1)), 30))
+                    continue
+                if e.code < 500:
                     break
             except Exception as e:
                 last = "provider unreachable"
@@ -425,8 +432,12 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
 
     def say(stage):  # stage + elapsed seconds only; never prompt text
         print(f"[prompts] {stage} t={round(time.time() - t0)}s", flush=True)
+        relay = "processing" if stage == "writing" else "validating_output" if stage.startswith("repairing") else stage
         if progress:
-            progress(stage)
+            try:
+                progress(relay)  # relay accepts a fixed stage list; a progress hiccup never fails the job
+            except Exception:
+                pass
     path = os.path.join(workdir, "prompts-checkpoint.json")
     ident = fingerprint(f"{brief}|{count}|{VERSION}")
     ck = {"version": VERSION, "request": ident, "plan": None, "units": {}}
