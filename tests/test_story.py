@@ -62,3 +62,35 @@ def test_story_rejects_empty_prompt(tmp_path):
 def test_story_registered_without_input():
     op = get("story_generate")
     assert op.needs_input is False and op.max_input == 0
+
+
+def test_requested_nemotron_3_super_primary(monkeypatch):
+    monkeypatch.setenv("NVIDIA_API_KEY", "test-nvidia")
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq")
+    calls = []
+    def post(url, key, payload):
+        calls.append((url, payload))
+        return "generated"
+    monkeypatch.setattr(story, "_post", post)
+    assert story._call([{"role": "user", "content": "hello"}], 6000) == "generated"
+    assert calls[0][0] == "https://integrate.api.nvidia.com/v1/chat/completions"
+    assert calls[0][1]["model"] == "nvidia/nemotron-3-super-120b-a12b"
+    assert "max_tokens" not in calls[0][1]
+    assert len(calls) == 1
+
+
+def test_requested_groq_120b_fallback(monkeypatch):
+    import urllib.error
+    monkeypatch.setenv("NVIDIA_API_KEY", "test-nvidia")
+    monkeypatch.setenv("GROQ_API_KEY", "test-groq")
+    calls = []
+    def post(url, key, payload):
+        calls.append((url, payload))
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(url, 413, "Too large", {}, None)
+        return "fallback generated"
+    monkeypatch.setattr(story, "_post", post)
+    assert story._call([{"role": "user", "content": "hello"}], 6000) == "fallback generated"
+    assert calls[1][0] == "https://api.groq.com/openai/v1/chat/completions"
+    assert calls[1][1]["model"] == "openai/gpt-oss-120b"
+    assert calls[1][1]["max_tokens"] == 6000
