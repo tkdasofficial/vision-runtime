@@ -28,7 +28,7 @@ REQUIRED_SECTIONS = [
 ]
 
 NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
-NVIDIA_MODEL = "nvidia/llama-3.3-nemotron-super-49b-v1.5"
+NVIDIA_MODEL = "nvidia/nemotron-3-super-120b-a12b"
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "openai/gpt-oss-120b"
 
@@ -63,7 +63,12 @@ def _call(messages: list[dict], max_tokens: int) -> str:
     for url, key, model in providers:
         for attempt in range(2):
             try:
-                text = _post(url, key, {"model": model, "messages": messages, "max_tokens": max_tokens, "temperature": 0.7})
+                payload = {"model": model, "messages": messages, "temperature": 0.7}
+                # The upgraded primary uses its native output budget; keep the
+                # existing fallback budget unchanged.
+                if model == GROQ_MODEL:
+                    payload["max_tokens"] = max_tokens
+                text = _post(url, key, payload)
                 if text:
                     return text
                 last = "empty response"
