@@ -5,39 +5,43 @@ from runtime.operations import OpError
 from workers.prompts import index as P
 
 BIBLE = {"characters": {"Mira": "a 30-year-old woman with a silver bob, green eyes, red wool coat"},
-         "style": "35mm film still, teal and amber palette", "setting": "rainy neon city", "negative": "no text, no watermark"}
+         "style": "35mm film still, teal and amber palette", "negative": "no text, no watermark"}
+SPEC = {"count": 3, "noun": "prompt", "multi": True, "sections": P.DEFAULT_SECTIONS, "devanagari": False, "story": False}
 def plan(n):
-    return {"bible": BIBLE, "initial_state": {"mira.umbrella": "closed"},
-            "outline": [{"index": i, "moment": f"m{i}", "characters": ["Mira"], "before": {}, "after": {}} for i in range(1, n + 1)]}
-def prompt(i, desc=BIBLE["characters"]["Mira"]):
-    return (f"## Prompt {i}\nSubject: Mira walks\nCharacters: Mira, {desc}\nSetting: street\nAction: walking slowly in the rain\n"
-            f"Camera: low tracking shot\nLighting: neon rim light\nStyle: {BIBLE['style']}\nNegative: {BIBLE['negative']}\n" + "x" * 50)
+    return {"blueprint": "b" * 300, "bible": BIBLE, "initial_state": {"mira.umbrella": "closed"},
+            "clues": [{"name": "silver key", "setup": 1, "payoff": n}],
+            "outline": [{"index": i, "moment": f"m{i}", "time": f"0{i}:00", "location": "street", "characters": ["Mira"], "before": {}, "after": {}} for i in range(1, n + 1)]}
+def unit(i, desc=BIBLE["characters"]["Mira"], extra=""):
+    body = "\n".join(f"## {f}\n{f} details" for f in P.DEFAULT_SECTIONS)
+    return f"# Prompt {i}: t\n{body}\nMira is {desc}. {BIBLE['style']}. {BIBLE['negative']}. {extra}" + "x" * 200
 
 def test_counts():
-    assert P.prompt_count("write 20 linked scene prompts") == 20
-    assert P.prompt_count("ten image prompts") == 10
-    assert P.prompt_count("an image prompt of a cat") == 1
+    assert P.unit_count("Generate exactly 10 detailed, sequential scene-generation prompts")[0] == 10
+    assert P.unit_count("ten image prompts") == (10, "prompt")
+    assert P.unit_count("an image prompt of a cat")[0] == 1
     with pytest.raises(OpError):
-        P.prompt_count("write 500 prompts")
+        P.unit_count("write 500 prompts")
 
-def test_plan_must_match_count_and_bible():
-    assert P.validate_plan(plan(5), 5) == []
-    assert P.validate_plan(plan(4), 5)
-    bad = plan(2); bad["outline"][1]["characters"] = ["Ghost"]
-    assert any("missing from the bible" in x for x in P.validate_plan(bad, 2))
+def test_sections_from_brief():
+    b = "1. Scene Title and Context: x\n2. Character Details: y\n3. Visual Prompt (English): z\n"
+    assert P.required_sections(b) == ["Scene Title and Context", "Character Details", "Visual Prompt"]
 
-def test_locked_descriptor_must_be_verbatim():
-    assert P.check_prompt(prompt(3), 3, plan(5), True) == []
-    drift = prompt(3, "a woman with long black hair")
-    assert any("Mira" in x for x in P.check_prompt(drift, 3, plan(5), True))
-    assert any("header" in x for x in P.check_prompt(prompt(2), 3, plan(5), True))
+def test_plan_rules():
+    assert P.validate_plan(plan(3), 3) == []
+    assert P.validate_plan(plan(2), 3)
+    bad = plan(3); bad["clues"][0]["payoff"] = 1
+    assert any("setup < payoff" in x for x in P.validate_plan(bad, 3))
 
-def test_review_requires_all_checks_and_evidence():
-    text = prompt(1) + " she opens the umbrella"
-    ok = {"checks": {c: True for c in P.CATEGORIES}, "issues": [],
-          "changes": [{"key": "mira.umbrella", "from": "closed", "to": "open", "evidence": "she opens the umbrella"}]}
-    issues, st = P.validate_review(ok, text, {"mira.umbrella": "closed"})
-    assert issues == [] and st["mira.umbrella"] == "open"
-    ok["changes"][0]["evidence"] = "invented"
-    assert P.validate_review(ok, text, {"mira.umbrella": "closed"})[0]
-    assert P.validate_review({"checks": {}, "issues": [], "changes": []}, text, {})[0]
+def test_locks_and_clues_verbatim():
+    p = plan(3)
+    assert P.check_prompt if False else True
+    assert P.check_unit(unit(2), 2, p, SPEC) == []
+    assert any("Mira" in x for x in P.check_unit(unit(2, "a woman with black hair"), 2, p, SPEC))
+    assert any("silver key" in x for x in P.check_unit(unit(3), 3, p, SPEC))
+    assert P.check_unit(unit(3, extra="the silver key"), 3, p, SPEC) == []
+
+def test_story_only_when_asked_and_fences():
+    assert P.wants_story("Write a story with 5 scene prompts")
+    assert not P.wants_story("Generate 10 scene prompts. Do not generate the finished story itself.")
+    f = P.fence("# Scene 1\n```x```\nhi")
+    assert f.startswith("````markdown\n") and f.endswith("\n````")

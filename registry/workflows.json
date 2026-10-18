@@ -4,7 +4,6 @@
     "ops": [
       "office_convert",
       "render",
-      "story_generate",
       "checksum"
     ],
     "sources": [
@@ -290,7 +289,8 @@
   "prompts": {
     "worker": "prompts",
     "ops": [
-      "prompt_generate"
+      "prompt_generate",
+      "story_generate"
     ]
   },
   "terminal": {

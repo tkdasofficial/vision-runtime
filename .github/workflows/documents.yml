@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
     inputs:
       job_id: { description: "VISION job id (UUID)", required: true, type: string }
-      operation: { description: "Registered operation", required: true, type: choice, options: [office_convert, render, story_generate, checksum] }
+      operation: { description: "Registered operation", required: true, type: choice, options: [office_convert, render, checksum] }
 
 permissions:
   contents: read
@@ -39,6 +39,4 @@ jobs:
           OPERATION: ${{ inputs.operation }}
           WORKFLOW: documents
           WORKER: documents
-          NVIDIA_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.NVIDIA_API_KEY || '' }}
-          GROQ_API_KEY: ${{ inputs.operation == 'story_generate' && secrets.GROQ_API_KEY || '' }}
         run: python3 runtime/runner.py

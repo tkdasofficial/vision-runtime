@@ -46,8 +46,8 @@ def test_workflow_valid_and_routed(path):
     assert os.path.exists(os.path.join(ROOT, "workers", reg["worker"], "index.py"))
     assert on["workflow_dispatch"]["inputs"]["operation"]["options"] == reg["ops"]
     text = open(path).read()
-    assert ("secrets." in text) == (name in ("documents", "prompts"))  # AI keys only in story/prompt workflows
-    assert text.count("secrets.") == text.count("inputs.operation == 'story_generate' && secrets.") + text.count("inputs.operation == 'prompt_generate' && secrets.")
+    assert ("secrets." in text) == (name == "prompts")  # AI keys only in the prompts workflow
+    assert text.count("secrets.") == text.count("inputs.operation == 'story_generate') && secrets.")
     for step in doc["jobs"]["run"]["steps"]:
         if "uses" in step:
             assert len(step["uses"].split("@")[1]) == 40  # pinned to a commit SHA

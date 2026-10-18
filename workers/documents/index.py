@@ -1,4 +1,4 @@
-"""VISION runtime worker: documents (office text documents, LaTeX, and story generation in story.py)."""
+"""VISION runtime worker: documents (office text documents, LaTeX)."""
 from runtime.worker_base import Worker
 
 WORKER = Worker("documents")

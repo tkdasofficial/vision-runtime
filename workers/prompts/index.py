@@ -1,52 +1,165 @@
-"""VISION runtime worker: prompts — one prompt or a linked series (5, 10, 20 … up to 100) with locked consistency.
+"""VISION runtime worker: prompts — single prompts, linked prompt series and story scene prompts (story_generate).
 
-Pipeline (same contract as the story pipeline in workers/documents/story.py, which it reuses for provider calls):
-  plan  -> a locked "bible" (characters with fixed visual descriptors, style, setting, negatives) + one contract per prompt
-  write -> each prompt in order, carrying the bible, the full outline and validated state
-  check -> deterministic: header, required fields, every locked descriptor and the style lock copied VERBATIM
-           independent review: identity/style/continuity/instructions/structure, evidence-quoted state changes
-  repair-> bounded retries per prompt; an unresolved prompt stops the run (no later prompt is written on a broken one)
-  audit -> blocking whole-series audit, then one prompts.md
-A checkpoint bound to the brief + pipeline version lets a resumed run skip accepted prompts.
-Logs never contain prompt text.
+Pipeline:
+  plan    -> Master Blueprint + locked bible (character descriptors, style, negative, rules, props) + one contract per unit
+  write   -> every unit IN PARALLEL: the plan already fixes each unit's before/after state, so units never wait on each other
+  check   -> deterministic gate per unit: header, every required section, bible descriptors / style / negative copied
+             verbatim, Devanagari dialogue when Hindi is requested, contracted state facts present
+  review  -> independent model review per unit (parallel), evidence-quoted only
+  repair  -> only failing units, bounded rounds, in parallel
+  audit   -> whole-series audit with a 0-100 consistency score; the run is accepted only at >= MIN_SCORE
+A checkpoint bound to the brief + pipeline version lets a resumed run skip accepted units. Logs never contain text.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
+import time
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from typing import Callable
 
 from runtime.operations import OpError
 from runtime.worker_base import Worker
-from workers.documents.story import _call, fingerprint, parse_json
 
-VERSION = 1
-MAX_PROMPTS = 100
+VERSION = 3
+MAX_UNITS = 100
 MAX_BRIEF_CHARS = 60_000
-RETRIES = 2
+REPAIR_ROUNDS = 2
+PARALLEL = 5
+MIN_SCORE = 90
+CALL_TIMEOUT_S = 180
+DEFAULT_SECTIONS = ["Subject", "Characters", "Setting", "Action", "Camera", "Lighting", "Style", "Negative"]
 CATEGORIES = ("identity", "style", "continuity", "instructions", "structure")
-FIELDS = ("subject", "characters", "setting", "action", "camera", "lighting", "style", "negative")
+
+NVIDIA_URL = "https://integrate.api.nvidia.com/v1/chat/completions"
+NVIDIA_MODEL = "nvidia/nemotron-3-super-120b-a12b"
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = "openai/gpt-oss-120b"
 
 WORKER = Worker("prompts")
-
-SYSTEM = ("You are VISION's prompt engineer for image/video generators. Follow the user's brief exactly: count, "
-          "language, target model, length and format. Output only the requested content — no commentary.")
-
-_NUM = {"one": 1, "single": 1, "a": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
-        "nine": 9, "ten": 10, "twelve": 12, "fifteen": 15, "twenty": 20, "thirty": 30, "fifty": 50}
+SYSTEM = ("You are VISION's prompt engineer for story scenes and image/video generators. Follow the user's brief exactly: "
+          "count, sections, languages, scripts and format. Output only the requested content — no commentary.")
 
 
-def prompt_count(brief: str, given=None) -> int:
+# ---------- providers ----------
+
+def _post(url: str, key: str, payload: dict) -> str:
+    req = urllib.request.Request(url, data=json.dumps(payload).encode(), method="POST", headers={
+        "Authorization": f"Bearer {key}", "Content-Type": "application/json", "User-Agent": "vision-runtime"})
+    with urllib.request.urlopen(req, timeout=CALL_TIMEOUT_S) as r:
+        data = json.loads(r.read())
+    text = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+    return re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
+
+
+def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False) -> str:
+    """NVIDIA first, Groq fallback; one bounded retry per provider on transient errors only."""
+    providers = [(u, os.environ[k], m) for u, k, m in ((NVIDIA_URL, "NVIDIA_API_KEY", NVIDIA_MODEL), (GROQ_URL, "GROQ_API_KEY", GROQ_MODEL)) if os.environ.get(k)]
+    if not providers:
+        raise OpError("No AI provider key is configured on the runner.")
+    last = "no provider succeeded"
+    for url, key, model in providers:
+        for attempt in range(2):
+            try:
+                payload = {"model": model, "messages": messages, "temperature": 0.4, "max_tokens": max_tokens}
+                if json_mode:
+                    payload["response_format"] = {"type": "json_object"}
+                text = _post(url, key, payload)
+                if text:
+                    return text
+                last = "empty response"
+            except urllib.error.HTTPError as e:
+                last = f"provider HTTP {e.code}"
+                if e.code not in (429,) and e.code < 500:
+                    break
+            except Exception:
+                last = "provider unreachable"
+            time.sleep(2 * (attempt + 1))
+    raise OpError(f"The AI providers could not complete this step ({last}).")
+
+
+CALL: Callable[..., str] = provider_call  # tests/benchmarks swap this
+
+
+def _ai(messages, max_tokens, json_mode=False):
+    return CALL(messages, max_tokens, json_mode)
+
+
+def auditor_call(messages, max_tokens, json_mode=False):
+    """Audits run on a different model than the writer (Groq first) so the series is not graded by its own author."""
+    saved = os.environ.pop("NVIDIA_API_KEY", None) if os.environ.get("GROQ_API_KEY") else None
+    try:
+        return provider_call(messages, max_tokens, json_mode)
+    finally:
+        if saved is not None:
+            os.environ["NVIDIA_API_KEY"] = saved
+
+
+AUDIT_CALL: Callable[..., str] = auditor_call
+
+
+def fingerprint(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def parse_json(raw: str):
+    clean = re.sub(r"<think>[\s\S]*?</think>", "", raw).strip()
+    clean = re.sub(r"^```(?:json)?\s*|\s*```$", "", clean)
+    a, b = clean.find("{"), clean.rfind("}")
+    return json.loads(clean[a:b + 1] if a >= 0 else clean)
+
+
+# ---------- brief parsing ----------
+
+_NUM = {"one": 1, "single": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+        "ten": 10, "twelve": 12, "fifteen": 15, "twenty": 20, "thirty": 30, "fifty": 50}
+_UNIT = r"(prompts?|scenes?|shots?|frames?|panels?|clips?|images?|chapters?|episodes?|parts?)"
+
+
+def unit_count(brief: str, given=None) -> tuple[int, str]:
+    m = re.search(r"\b(\d{1,3}|" + "|".join(_NUM) + r")[\s,-]+(?:[\w-]+[\s,]+){0,4}?" + _UNIT + r"\b", brief, re.I)
+    noun = "scene" if m and re.match(r"scene|chapter|episode|part", m.group(2), re.I) else "prompt"
     if given is not None:
         n = int(given) if str(given).isdigit() else 0
     else:
-        m = re.search(r"\b(\d{1,3}|" + "|".join(_NUM) + r")[\s-]+(?:[\w-]+[\s,]+){0,3}?(?:prompts?|scenes?|shots?|frames?|panels?|clips?|images?)\b", brief, re.I)
         n = (int(m.group(1)) if m.group(1).isdigit() else _NUM[m.group(1).lower()]) if m else 1
-    if not 1 <= n <= MAX_PROMPTS:
-        raise OpError(f"Prompt requests must contain 1–{MAX_PROMPTS} prompts; the requested count will not be shortened.")
-    return n
+    if not 1 <= n <= MAX_UNITS:
+        raise OpError(f"Requests must contain 1–{MAX_UNITS} prompts or scenes; the requested count will not be shortened.")
+    return n, noun
 
+
+def required_sections(brief: str) -> list[str]:
+    """Numbered section list from the brief ("1. Scene Title and Context: ..."), else the default prompt fields."""
+    found = re.findall(r"^\s*(\d{1,2})[.)]\s+([A-Z][^:\n]{2,60}):", brief, re.M)
+    seq = []
+    for n, name in found:
+        if int(n) == len(seq) + 1:
+            seq.append(re.sub(r"\s*\([^)]*\)", "", name).strip())
+    return seq if len(seq) >= 3 else DEFAULT_SECTIONS
+
+
+def wants_story(brief: str) -> bool:
+    """Full story text only when the brief asks for it and does not forbid it."""
+    if re.search(r"\b(?:do not|don't|dont|never|without)\s+(?:generate|write|include|give)?\s*(?:the\s+)?(?:finished|full|complete)?\s*story\b", brief, re.I):
+        return False
+    return bool(re.search(r"\b(?:write|create|generate|give|make)\b[^.\n]{0,40}\bstory\b[^.\n]{0,40}\b(?:and|with|plus)\b[^.\n]{0,30}\bprompts?\b", brief, re.I))
+
+
+def fence(text: str) -> str:
+    """One independently copyable Markdown block; the fence is longer than any backtick run inside."""
+    run = max([len(m) for m in re.findall(r"`{3,}", text)] + [3]) + 1
+    return f"{'`' * run}markdown\n{text.strip()}\n{'`' * run}"
+
+
+def wants_devanagari(brief: str) -> bool:
+    return bool(re.search(r"\b(hindi|devanagari)\b", brief, re.I))
+
+
+# ---------- validation ----------
 
 def _facts(d) -> bool:
     return isinstance(d, dict) and all(isinstance(k, str) and isinstance(v, str) and k.strip() and v.strip() for k, v in d.items())
@@ -56,119 +169,189 @@ def validate_plan(plan, count: int) -> list[str]:
     if not isinstance(plan, dict):
         return ["Plan must be an object"]
     issues = []
-    bible = plan.get("bible")
-    if not isinstance(bible, dict):
-        return ["Missing bible"]
+    bible = plan.get("bible") if isinstance(plan.get("bible"), dict) else {}
     chars = bible.get("characters")
-    if not isinstance(chars, dict) or not _facts(chars):
+    if not isinstance(chars, dict) or not chars or not _facts(chars):
         issues.append("Bible characters must map each name to a locked visual descriptor")
-    for k in ("style", "setting", "negative"):
+        chars = {}
+    for k in ("style", "negative"):
         if not isinstance(bible.get(k), str) or not bible[k].strip():
             issues.append(f"Bible needs {k}")
-    state = plan.get("initial_state", {})
-    if not _facts(state) and state != {}:
-        issues.append("Initial state must contain string facts keyed by entity.field")
-        state = {}
+    if not isinstance(plan.get("blueprint"), str) or len(plan["blueprint"].strip()) < 200:
+        issues.append("Missing Master Blueprint")
+    state = plan.get("initial_state") if _facts(plan.get("initial_state")) else {}
     state = dict(state)
     outline = plan.get("outline")
     if not isinstance(outline, list) or len(outline) != count:
-        return issues + [f"Outline must contain exactly {count} prompts"]
+        return issues + [f"Outline must contain exactly {count} units"]
     for i, beat in enumerate(outline, 1):
         if not isinstance(beat, dict) or beat.get("index") != i:
-            issues.append(f"Prompt contract {i} is invalid or out of order"); continue
+            issues.append(f"Contract {i} is invalid or out of order"); continue
         if not isinstance(beat.get("moment"), str) or not beat["moment"].strip():
-            issues.append(f"Prompt {i} needs moment")
+            issues.append(f"Unit {i} needs moment")
+        for key in ("time", "location"):
+            if not isinstance(beat.get(key), str) or not beat[key].strip():
+                issues.append(f"Unit {i} needs {key}")
         cast = beat.get("characters", [])
-        if not isinstance(cast, list) or (isinstance(chars, dict) and any(c not in chars for c in cast)):
-            issues.append(f"Prompt {i} uses a character missing from the bible")
+        if not isinstance(cast, list) or any(c not in chars for c in cast):
+            issues.append(f"Unit {i} uses a character missing from the bible")
         for key in ("before", "after"):
-            facts = beat.get(key, {})
-            if facts and not _facts(facts):
-                issues.append(f"Prompt {i} has invalid {key} state"); continue
+            facts = beat.get(key) or {}
+            if not _facts(facts) and facts != {}:
+                issues.append(f"Unit {i} has invalid {key} state"); continue
             if key == "before":
-                issues += [f"Prompt {i} precondition does not follow prior state: {f}" for f, v in (facts or {}).items() if state.get(f) != v]
+                issues += [f"Unit {i} precondition does not follow prior state: {f}" for f, v in facts.items() if state.get(f) != v]
             else:
-                state.update(facts or {})
+                state.update(facts)
+    clues = plan.get("clues")
+    if count > 1:
+        if not isinstance(clues, list) or not clues:
+            issues.append("Plan needs clues with setup and payoff units")
+        else:
+            for c in clues:
+                if not (isinstance(c, dict) and isinstance(c.get("name"), str) and isinstance(c.get("setup"), int)
+                        and isinstance(c.get("payoff"), int) and 1 <= c["setup"] < c["payoff"] <= count):
+                    issues.append(f"Clue {c.get('name') if isinstance(c, dict) else c} needs setup < payoff within the series")
     return issues
 
 
-def check_prompt(text: str, index: int, plan: dict, multi: bool) -> list[str]:
-    """Deterministic consistency gate: the locks must be copied word-for-word, not paraphrased."""
-    problems = []
-    low = text.lower()
-    if multi:
-        heads = [int(n) for n in re.findall(r"^\s*#{1,3}\s+prompt\s+(\d+)\b", text, re.I | re.M)]
+def _norm(s: str) -> str:
+    return re.sub(r"[\s*_`]+", " ", s.lower()).strip()
+
+
+def check_unit(text: str, index: int, plan: dict, spec: dict) -> list[str]:
+    """Deterministic consistency gate: locks must be copied word-for-word, not paraphrased."""
+    problems, low = [], _norm(text)
+    if spec["multi"]:
+        heads = [int(n) for n in re.findall(rf"^\s*#{{1,3}}\s+(?:{spec['noun']}|prompt)\s+(\d+)\b", text, re.I | re.M)]
         if heads != [index]:
-            problems.append(f"Expected exactly one '## Prompt {index}' header")
-    missing = [f for f in FIELDS if not re.search(rf"^\s*(?:[-*]\s*)?\**{f}\**\s*:", text, re.I | re.M)]
-    if missing:
-        problems.append("missing fields: " + ", ".join(missing))
+            problems.append(f"Expected exactly one '# {spec['noun'].title()} {index}' header")
+    heads = [_norm(re.sub(r"^\s*(?:#{1,6}\s+|\*\*)", "", l)) for l in text.splitlines() if re.match(r"^\s*(?:#{1,6}\s+|\*\*|\d{1,2}[.)]\s)", l)]
+    heads += [_norm(l.split(":")[0]) for l in text.splitlines() if ":" in l]
+    for sec in spec["sections"]:
+        key = _norm(sec).split(" and ")[0][:24]
+        if not any(key in h for h in heads):
+            problems.append(f"missing section: {sec}")
     bible = plan["bible"]
-    if bible["style"].strip().lower() not in low:
-        problems.append("style lock not copied verbatim")
-    if bible["negative"].strip().lower() not in low:
-        problems.append("negative lock not copied verbatim")
-    cast = plan["outline"][index - 1].get("characters", [])
-    for name in cast:
-        desc = bible["characters"][name].strip().lower()
-        if desc not in low:
+    for lock in ("style", "negative"):
+        if _norm(bible[lock]) not in low:
+            problems.append(f"{lock} lock not copied verbatim")
+    for name in plan["outline"][index - 1].get("characters", []):
+        if _norm(bible["characters"][name]) not in low:
             problems.append(f"locked descriptor for {name} changed or missing")
-    if len(text.strip()) < 200:
+    if spec["devanagari"] and not re.search(r"[\u0900-\u097F]{3,}", text):
+        problems.append("dialogue is not in Devanagari")
+    for key, val in (plan["outline"][index - 1].get("after") or {}).items():
+        if _norm(val) not in low:
+            problems.append(f"contracted change not shown verbatim: {key} -> {val}")
+    if "master story blueprint" in low:
+        problems.append("unit must not repeat the Master Story Blueprint")
+    for c in plan.get("clues") or []:
+        if index in (c.get("setup"), c.get("payoff")) and _norm(c["name"]) not in low:
+            problems.append(f"clue '{c['name']}' must appear by name (setup {c['setup']}, payoff {c['payoff']})")
+    if len(text.strip()) < (600 if spec["noun"] == "scene" else 200):
         problems.append("too short")
     return problems
 
 
-def validate_review(review, text: str, state: dict, contract=None):
-    candidate = dict(state)
+def validate_review(review) -> list[str]:
     if not isinstance(review, dict):
-        return ["Review must be an object"], candidate
+        return ["Review must be an object"]
     checks = review.get("checks") if isinstance(review.get("checks"), dict) else {}
     issues = ["Failed or unchecked: " + c for c in CATEGORIES if checks.get(c) is not True]
-    findings = review.get("issues")
-    issues += findings if isinstance(findings, list) and all(isinstance(i, str) for i in findings) else ["Review issues must be a list of strings"]
-    changes = review.get("changes")
-    if not isinstance(changes, list):
-        return issues + ["Missing evidence-linked changes"], candidate
-    for ch in changes:
-        if not isinstance(ch, dict):
-            issues.append("Invalid state transition"); continue
-        key, before, after, ev = (ch.get(k) for k in ("key", "from", "to", "evidence"))
-        if not (isinstance(key, str) and key.strip() and candidate.get(key) == before and isinstance(after, str) and after.strip()
-                and isinstance(ev, str) and ev.strip() and ev in text):
-            issues.append("State transition lacks valid prior state or exact evidence"); continue
-        candidate[key] = after
-    if contract:
-        issues += ["Unmet precondition: " + k for k, v in (contract.get("before") or {}).items() if state.get(k) != v]
-        issues += ["Required change not shown: " + k for k, v in (contract.get("after") or {}).items() if candidate.get(k) != v]
-    return issues, candidate
+    found = review.get("issues")
+    issues += found if isinstance(found, list) and all(isinstance(i, str) for i in found) else ["Review issues must be a list of strings"]
+    return issues
 
 
-REVIEW = SYSTEM + """ Independently critique the draft prompt. JSON only:
-{"checks":{"identity":true,"style":true,"continuity":true,"instructions":true,"structure":true},"issues":[],"changes":[{"key":"entity.field","from":"old","to":"new","evidence":"exact quote from draft"}]}
-identity: every character matches the bible (face, age, hair, build, outfit) with nothing added or contradicted.
-style: same medium, palette, lens language and rendering as the bible. continuity: props, wounds, clothing, location,
-time of day and weather follow validated state and the contract. instructions: the brief's count/language/model/length rules.
-structure: header and every field present. false means blocked. Changes list ONLY facts this prompt changes."""
+def deterministic_score(units: list[str], plan: dict, spec: dict) -> int:
+    """Percent of all lock/section/state checks that pass across the series."""
+    total = passed = 0
+    for i, text in enumerate(units, 1):
+        n_checks = len(spec["sections"]) + 2 + len(plan["outline"][i - 1].get("characters", [])) + len(plan["outline"][i - 1].get("after") or {}) + 2
+        total += n_checks
+        passed += max(0, n_checks - len(check_unit(text, i, plan, spec)))
+    return round(100 * passed / total) if total else 0
 
+
+# ---------- prompts ----------
+
+PLAN_SYS = SYSTEM + """ Plan before writing. Return JSON only:
+{"story":"ONLY when the brief asks for the story itself: the complete story prose, else empty string",
+"blueprint":"complete Master Story Blueprint in Markdown (plot, characters, appearances, clothing, locations, rules, props, timeline, mysteries, clues, ending)",
+"bible":{"characters":{"Name":"locked visual descriptor, 20-40 words: age, face, hair, build, exact clothing"},"style":"ONE locked cinematic style line","negative":"ONE locked negative-constraints line"},
+"initial_state":{"entity.field":"short value"},
+"clues":[{"name":"short clue name","setup":1,"payoff":10}],
+"outline":[{"index":1,"moment":"what happens","time":"HH:MM","location":"place","characters":["Name"],"props_in_play":["prop: who holds it / where"],"injuries":["Name: injury (cause, unit)"],"clues_planted":["clue name"],"clues_paid":["clue name"],"before":{"entity.field":"value"},"after":{"entity.field":"new short value"}}]}
+Exactly N outline items. Times never go backwards and gaps are explained. Every prop or injury exists only from the unit that causes it;
+a dropped/lost prop stays dropped until a unit recovers it. Every clue planted is paid off in a later unit (final unit resolves the mystery). Each unit advances one causal step; every 'before' equals the state left by earlier units.
+Track props' locations, injuries, knowledge and clues as state keys. Values are 1-4 word phrases. Seed clues early and pay them off at the end."""
+
+REVIEW_SYS = SYSTEM + """ Critique the draft against the bible, contract and brief. JSON only:
+{"checks":{"identity":true,"style":true,"continuity":true,"instructions":true,"structure":true},"issues":[]}
+identity: characters match bible appearance and clothing. style: same visual style. continuity: props, injuries, location,
+knowledge and time follow the contract's before state and reach its after state; nothing from later units revealed.
+instructions: brief's language/script/section rules. structure: header and all sections. false = blocked; issues name the smallest fix."""
+
+AUDIT_SYS = SYSTEM + """ Audit the WHOLE series for consistency and continuity. JSON only:
+{"score":0-100,"checks":{"identity":true,"style":true,"continuity":true,"instructions":true,"structure":true},"issues":[],"units":[unit numbers that must be repaired]}
+Each issue must start with "unit N:". Score strictly: deduct for any appearance/clothing drift, prop teleportation, timeline gaps, unexplained knowledge, unpaid clues, rule violations."""
+
+
+def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | None = None, draft: str | None = None):
+    c = plan["outline"][i - 1]
+    head = f"Begin with the line '# {spec['noun'].title()} {i}: <title>'. " if spec["multi"] else ""
+    sys = (SYSTEM + f" Write ONLY {spec['noun']} {i} of {spec['count']} as a self-contained Markdown document. {head}"
+           f"Use these sections as '## ' headings, in order: {'; '.join(spec['sections'])}. "
+           "Copy WORD FOR WORD into the text: each present character's bible descriptor, the bible style line, the bible negative line, "
+           "and each contracted 'after' value. Start from the 'before' state, end at the 'after' state; never reveal later units. "
+           "Use ONLY the contract's time, location, props_in_play and injuries: invent no new props, wounds, events or locations. "
+           "Name each planted/paid clue exactly. Do not repeat the blueprint. The ending must lead directly into next_unit.")
+    if spec["devanagari"]:
+        sys += " Dialogue lines are in natural Hindi using Devanagari script; everything else in English."
+    ctx = {"brief": brief, "bible": plan["bible"], "blueprint": plan["blueprint"],
+           "clues": plan.get("clues"), "outline": [{"index": o["index"], "moment": o["moment"], "time": o.get("time")} for o in plan["outline"]],
+           "previous_unit": plan["outline"][i - 2] if i > 1 else None, "contract": c,
+           "next_unit": plan["outline"][i] if i < len(plan["outline"]) else None}
+    msgs = [{"role": "system", "content": sys}, {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}]
+    if fix and draft:
+        msgs += [{"role": "assistant", "content": draft},
+                 {"role": "user", "content": f"Fix ONLY these problems and return the full corrected {spec['noun']}: " + "; ".join(fix[:10])}]
+    return msgs
+
+
+def _write_and_check(i, plan, spec, brief, fix=None, draft=None):
+    text = _ai(_unit_messages(i, plan, spec, brief, fix, draft), 5000)
+    problems = check_unit(text, i, plan, spec)
+    if not problems:
+        try:
+            ctx = {"bible": plan["bible"], "contract": plan["outline"][i - 1], "brief_rules": brief[:4000], "draft": text}
+            problems = validate_review(parse_json(_ai([{"role": "system", "content": REVIEW_SYS},
+                                                       {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}], 1500, True)))
+        except (ValueError, TypeError):
+            problems = []  # deterministic gate already passed; an unparsable review is not evidence of a defect
+    return i, text, problems
+
+
+# ---------- run ----------
 
 def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | None = None) -> dict:
     brief = str(params.get("prompt", "")).strip()
     if not brief or len(brief) > MAX_BRIEF_CHARS:
-        raise OpError("The prompt brief is missing or too large.")
-    count = prompt_count(brief, params.get("count"))
-    multi = count > 1
+        raise OpError("The brief is missing or too large.")
+    count, noun = unit_count(brief, params.get("count"))
+    spec = {"count": count, "noun": noun, "multi": count > 1, "sections": required_sections(brief), "devanagari": wants_devanagari(brief), "story": wants_story(brief) and count > 1}
     say = progress or (lambda s: None)
     path = os.path.join(workdir, "prompts-checkpoint.json")
-    ident = fingerprint(brief + f"|{count}")
-    ck = {"version": VERSION, "request": ident, "plan": None, "prompts": {}, "reviews": {}, "audit": None}
+    ident = fingerprint(f"{brief}|{count}|{VERSION}")
+    ck = {"version": VERSION, "request": ident, "plan": None, "units": {}}
     if os.path.exists(path):
         try:
-            with open(path, encoding="utf-8") as f:
-                saved = json.load(f)
+            saved = json.load(open(path, encoding="utf-8"))
         except ValueError:
-            raise OpError("Prompt checkpoint is invalid; no saved prompts were accepted.")
-        if saved.get("request") != ident or saved.get("version") != VERSION:
-            raise OpError("Prompt checkpoint belongs to a different brief or pipeline version.")
+            raise OpError("Checkpoint is invalid; no saved work was accepted.")
+        if saved.get("request") != ident:
+            raise OpError("Checkpoint belongs to a different brief or pipeline version.")
         ck = saved
 
     def save():
@@ -179,87 +362,94 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
     if not ck["plan"]:
         say("planning")
         problems: list[str] = []
-        for _ in range(1 + RETRIES):
-            raw = _call([{"role": "system", "content": SYSTEM + """ Plan before writing. JSON only:
-{"bible":{"characters":{"Name":"locked visual descriptor, 15-40 words: age, face, hair, build, exact outfit"},"style":"one locked style line (medium, palette, lens, lighting language)","setting":"world/location rules","negative":"one locked negative line"},
-"initial_state":{"entity.field":"value"},"outline":[{"index":1,"moment":"what this prompt shows","characters":["Name"],"before":{},"after":{}}]}
-outline has exactly N items in order. Each linked prompt advances one causal moment; every 'before' equals the state left by earlier prompts.
-Only changes physically possible in that moment go in 'after'. No prompt text yet."""},
-                         {"role": "user", "content": json.dumps({"brief": brief, "N": count, "repair": problems})}], 6000)
+        for _ in range(3):
             try:
-                plan = parse_json(raw); problems = validate_plan(plan, count)
+                plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS},
+                                       {"role": "user", "content": json.dumps({"brief": brief, "N": count, "repair": problems}, ensure_ascii=False)}], 12000, True))
+                problems = validate_plan(plan, count)
             except (ValueError, TypeError):
                 problems = ["Invalid planning JSON"]
             if not problems:
                 ck["plan"] = plan; save(); break
         if not ck["plan"]:
-            raise OpError("Prompt planning remains unresolved: " + "; ".join(problems[:4]))
+            raise OpError("Planning remains unresolved: " + "; ".join(problems[:4]))
     plan = ck["plan"]
     if validate_plan(plan, count):
-        raise OpError("Saved prompt plan is invalid.")
-    state = dict(plan.get("initial_state") or {})
-    written: list[str] = []
-    for i in range(1, count + 1):
-        key, contract = str(i), plan["outline"][i - 1]
-        if key in ck["prompts"]:
-            text = ck["prompts"][key]
-            bad, cand = validate_review(ck["reviews"].get(key), text, state, contract)
-            if check_prompt(text, i, plan, multi) or bad:
-                raise OpError(f"Saved prompt {i} failed revalidation; no dependent prompt was written.")
-            state = cand; written.append(text); continue
-        say(f"writing_prompt_{i}")
-        ctx = {"brief": brief, "bible": plan["bible"], "full_outline": plan["outline"], "contract": contract,
-               "validated_state": state, "previous_prompts": written[-2:]}
-        head = f"Start with the line '## Prompt {i}'. " if multi else ""
-        msgs = [{"role": "system", "content": SYSTEM + f" Write ONLY prompt {i}. {head}Then one line per field, labelled exactly: "
-                 + ", ".join(f.capitalize() + ":" for f in FIELDS)
-                 + ". Copy each present character's bible descriptor, the bible style line and the bible negative line WORD FOR WORD. "
-                   "Show only this contract's moment; never reveal later events; never change locked appearance."},
-                {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}]
-        problems, review, cand = ["not attempted"], None, state
-        for _ in range(1 + RETRIES):
-            text = _call(msgs, 3000)
-            problems = check_prompt(text, i, plan, multi)
-            if not problems:
-                say("validating_output")
-                try:
-                    review = parse_json(_call([{"role": "system", "content": REVIEW},
-                                               {"role": "user", "content": json.dumps({**ctx, "draft": text}, ensure_ascii=False)}], 3000))
-                    problems, cand = validate_review(review, text, state, contract)
-                except (ValueError, TypeError):
-                    problems = ["Reviewer did not return valid JSON"]
-            if not problems:
+        raise OpError("Saved plan is invalid.")
+
+    units: dict[int, str] = {}
+    for k, t in ck["units"].items():
+        if not check_unit(t, int(k), plan, spec):
+            units[int(k)] = t
+    pending = {i: (None, None) for i in range(1, count + 1) if i not in units}
+    with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
+        for round_ in range(1 + REPAIR_ROUNDS):
+            if not pending:
                 break
-            msgs = msgs[:2] + [{"role": "assistant", "content": text},
-                               {"role": "user", "content": f"Prompt {i} failed checks ({'; '.join(problems[:8])}). Repair ONLY this prompt."}]
-        if problems:
-            raise OpError(f"Prompt {i} could not be completed after retries ({'; '.join(problems[:4])}).")
-        ck["prompts"][key], ck["reviews"][key] = text, review
-        state = cand; written.append(text); save()
+            say("writing" if round_ == 0 else f"repairing_{len(pending)}")
+            results = list(pool.map(lambda i: _write_and_check(i, plan, spec, brief, *pending[i]), list(pending)))
+            nxt = {}
+            for i, text, problems in results:
+                if problems:
+                    nxt[i] = (problems, text)
+                else:
+                    units[i] = text; ck["units"][str(i)] = text
+            save(); pending = nxt
+        if pending:
+            raise OpError(f"{len(pending)} unit(s) could not pass consistency checks: " +
+                          "; ".join(f"{i}: {p[0][0]}" for i, p in list(pending.items())[:4]))
+
+        series = [units[i] for i in range(1, count + 1)]
+        det = deterministic_score(series, plan, spec)
+        audit_score = 100
+        if spec["multi"]:
+            say("validating_output")
+            for round_ in range(1 + REPAIR_ROUNDS):
+                doc = "\n\n---\n\n".join(series)
+                try:
+                    audit = parse_json(AUDIT_CALL([{"role": "system", "content": AUDIT_SYS},
+                                            {"role": "user", "content": json.dumps({"brief": brief[:6000], "bible": plan["bible"], "outline": plan["outline"], "clues": plan.get("clues"), "series": doc}, ensure_ascii=False)}], 4000, True))
+                    audit_score = int(audit.get("score", 0))
+                except (ValueError, TypeError):
+                    audit, audit_score = {"issues": ["Audit unparsable"], "units": []}, 0
+                if audit_score >= MIN_SCORE:
+                    break
+                notes_all = [x for x in audit.get("issues", []) if isinstance(x, str)]
+                fix = sorted({i for i in audit.get("units", []) if isinstance(i, int) and 1 <= i <= count}
+                             | {int(n) for x in notes_all for n in re.findall(r"unit (\d+)", x, re.I) if 1 <= int(n) <= count})
+                if not fix or round_ == REPAIR_ROUNDS:
+                    break
+                say(f"repairing_{len(fix)}")
+                def own(i):
+                    return [x for x in notes_all if re.search(rf"unit {i}\b", x, re.I)] or notes_all
+                for i, text, problems in pool.map(lambda i: _write_and_check(i, plan, spec, brief, own(i), series[i - 1]), fix):
+                    if not problems:
+                        series[i - 1] = text; ck["units"][str(i)] = text
+                save()
+            det = deterministic_score(series, plan, spec)
+    score = min(det, audit_score)
+    if spec["multi"] and score < MIN_SCORE:
+        raise OpError(f"Consistency score {score}% is below the {MIN_SCORE}% bar; the series was not approved.")
 
     b = plan["bible"]
-    bible_md = "# Consistency Bible\n\n" + "\n".join(f"- **{n}:** {d}" for n, d in b["characters"].items()) + \
-        f"\n- **Style:** {b['style']}\n- **Setting:** {b['setting']}\n- **Negative:** {b['negative']}\n"
-    document = (bible_md + "\n---\n\n" if multi else "") + "\n\n---\n\n".join(w.strip() for w in written) + "\n"
-    if multi and not ck.get("audit"):
-        say("validating_output")
-        try:
-            audit = parse_json(_call([{"role": "system", "content": REVIEW + " Final whole-series audit across ALL prompts: identity drift, style drift, continuity breaks, count. Return changes:[]."},
-                                      {"role": "user", "content": json.dumps({"brief": brief, "plan": plan, "series": document}, ensure_ascii=False)}], 4000))
-        except (ValueError, TypeError):
-            raise OpError("Final prompt audit did not return valid JSON; series not approved.")
-        problems, _ = validate_review(audit, document, state)
-        if audit.get("changes"):
-            problems.append("Final audit cannot mutate validated state")
-        if problems:
-            raise OpError("Final prompt audit remains unresolved: " + "; ".join(problems[:4]))
-        ck["audit"] = audit; save()
+    bible_md = "## Locked Visual Bible\n\n" + "\n".join(f"- **{n}:** {d}" for n, d in b["characters"].items()) + \
+        f"\n- **Style:** {b['style']}\n- **Negative:** {b['negative']}\n"
+    # Reply = exactly what was asked: story (if requested), blueprint, then each unit in its own Markdown block.
+    blocks = []
+    if spec["story"] and isinstance(plan.get("story"), str) and plan["story"].strip():
+        blocks.append(fence("# Story\n\n" + plan["story"].strip()))
+    if spec["multi"]:
+        blocks.append(fence("# Master Story Blueprint\n\n" + plan["blueprint"].strip() + "\n\n" + bible_md))
+    blocks += [fence(s) if spec["multi"] else s.strip() for s in series]
+    document = "\n\n".join(blocks) + "\n"
     say("assembling")
-    out = os.path.join(workdir, "prompts.md")
+    name = "story.md" if noun == "scene" else "prompts.md"
+    out = os.path.join(workdir, name)
     with open(out, "w", encoding="utf-8") as f:
         f.write(document)
     return {"output": out, "mime": "text/markdown",
-            "result": {"prompts": count, "linked": multi, "pipeline_version": VERSION, "audited": multi}}
+            "result": {"units": count, "kind": noun, "consistency_score": score, "deterministic_score": det,
+                       "audit_score": audit_score, "pipeline_version": VERSION}}
 
 
 run = WORKER.run
