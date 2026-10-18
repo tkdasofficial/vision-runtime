@@ -66,6 +66,11 @@ def provider_call(messages: list[dict], max_tokens: int, json_mode: bool = False
         for attempt in range(2):
             try:
                 payload = {"model": model, "messages": messages, "temperature": 0.4, "max_tokens": max_tokens}
+                # Speed: hidden reasoning is off — the plan, deterministic gate and independent audit do the checking.
+                if model == NVIDIA_MODEL:
+                    payload["chat_template_kwargs"] = {"enable_thinking": False}
+                else:
+                    payload["reasoning_effort"] = "low"
                 if json_mode:
                     payload["response_format"] = {"type": "json_object"}
                 text = _post(url, key, payload)
@@ -341,7 +346,12 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         raise OpError("The brief is missing or too large.")
     count, noun = unit_count(brief, params.get("count"))
     spec = {"count": count, "noun": noun, "multi": count > 1, "sections": required_sections(brief), "devanagari": wants_devanagari(brief), "story": wants_story(brief) and count > 1}
-    say = progress or (lambda s: None)
+    t0 = time.time()
+
+    def say(stage):  # stage + elapsed seconds only; never prompt text
+        print(f"[prompts] {stage} t={round(time.time() - t0)}s", flush=True)
+        if progress:
+            progress(stage)
     path = os.path.join(workdir, "prompts-checkpoint.json")
     ident = fingerprint(f"{brief}|{count}|{VERSION}")
     ck = {"version": VERSION, "request": ident, "plan": None, "units": {}}

@@ -25,7 +25,7 @@ PIP = {
     "diagrams": "cairosvg==2.8.2 ezdxf==1.4.2 matplotlib==3.10.5 pypdf==5.9.0",
     "fonts": "fonttools==4.59.0 brotli==1.1.0",
 }
-TIMEOUT = {"documents": 45, "video": 40, "audio": 30, "ebooks": 25, "diagrams": 20}
+TIMEOUT = {"prompts": 45, "documents": 45, "video": 40, "audio": 30, "ebooks": 25, "diagrams": 20}
 CHECKOUT = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2"
 
 
