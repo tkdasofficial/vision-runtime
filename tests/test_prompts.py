@@ -199,3 +199,49 @@ def test_visual_only_locks_do_not_add_ledger_or_profiles():
     assert "Canonical state" not in text
     assert "## Character Details" not in text
     assert text.count("## ") == 2
+
+
+def test_school_story_does_not_require_mystery():
+    p = plan(3); p["requires_clues"] = False; p["clues"] = []
+    assert P.validate_plan(p, 3) == []
+
+
+def test_failed_checks_cannot_pass_with_high_score():
+    checks = {c: True for c in P.CATEGORIES}; checks["continuity"] = False
+    score, notes, units = P.audit_findings({"score": 100, "checks": checks, "issues": [], "units": []}, [1, 2])
+    assert score < 90 and units == {1, 2}
+    checks["continuity"] = True
+    assert P.audit_findings({"score": 95, "checks": checks, "issues": [], "units": []}, [1])[0] == 95
+
+
+def test_unknown_and_unavailable_extraction_block(monkeypatch):
+    p = plan(2); p["outline"][0]["end_positions"] = {"Mira": "foyer"}
+    monkeypatch.setattr(P, "AUDIT_CALL", lambda *a: '{"end_positions":{"Mira":"unknown"}}')
+    assert any("not verified" in x for x in P.fact_issues("Mira waits.", 1, p))
+    def unavailable(*a): raise OpError("Unavailable")
+    monkeypatch.setattr(P, "AUDIT_CALL", unavailable)
+    assert any("unavailable" in x for x in P.fact_issues("Mira waits.", 1, p))
+
+
+def test_canonical_metadata_is_not_narrative_evidence():
+    t = "## Visual Prompt\n- **Mira (locked appearance):** red coat\n**Locked style:** film\nMira removes her coat.\n## Continuity\n**Canonical state at scene end:**\n- Mira ends at: foyer\n## Dialogue\nMira: Hello."
+    out = P.scene_evidence(t)
+    assert "removes her coat" in out and "locked appearance" not in out and "ends at:" not in out
+
+
+def test_fixed_background_checks_character_positions():
+    p = plan(3); p["bible"]["background"] = "classroom"
+    p["outline"][1]["end_positions"] = {"Mira": "outside"}
+    assert P.check_fixed_background(p, MONKEY_BRIEF)
+
+
+def test_dialogue_only_repair_preserves_visual_and_word_bounds(monkeypatch):
+    text = "## Visual Prompt\nUNCHANGED\n## Dialogue\nMira: Hello."
+    monkeypatch.setattr(P, "CALL", lambda *a: "## Dialogue\nMira (quietly): " + " ".join(["homework"] * 27))
+    fixed = P._fix_dialogue(text, ["too short"], (25, 30), False)
+    assert "UNCHANGED" in fixed and P.dialogue_words(fixed) == 27
+
+
+def test_subjective_state_does_not_need_literal_word():
+    p = plan(3); p["outline"][1]["after"] = {"Mira.confidence": "growing"}
+    assert not any("verbatim" in x for x in P.check_unit(unit(2), 2, p, SPEC))

@@ -5,7 +5,7 @@ Pipeline:
   write   -> every unit IN PARALLEL: the plan already fixes each unit's before/after state, so units never wait on each other
   check   -> deterministic gate per unit: header, every required section, bible descriptors / style / negative copied
              verbatim, Devanagari dialogue when Hindi is requested, contracted state facts present
-  review  -> independent model review per unit (parallel), evidence-quoted only
+  review  -> independent fact extraction and windowed audit, evidence-quoted only
   repair  -> only failing units, bounded rounds, in parallel
   audit   -> whole-series audit with a 0-100 consistency score; the run is accepted only at >= MIN_SCORE
 A checkpoint bound to the brief + pipeline version lets a resumed run skip accepted units. Logs never contain text.
@@ -26,7 +26,7 @@ from typing import Callable
 from runtime.operations import OpError
 from runtime.worker_base import Worker
 
-VERSION = 5
+VERSION = 6
 MAX_UNITS = 100
 MAX_BRIEF_CHARS = 60_000
 REPAIR_ROUNDS = 2
@@ -203,6 +203,9 @@ def check_fixed_background(plan: dict, brief: str) -> list[str]:
     if not fixed_background(brief):
         return []
     locations = {beat.get("location") for beat in plan.get("outline", [])}
+    for beat in plan.get("outline", []):
+        locations.update((beat.get("start_positions") or {}).values())
+        locations.update((beat.get("end_positions") or {}).values())
     issues = [] if len(locations) == 1 else ["Fixed background requires the same location in every scene; do not move outside"]
     if not str(plan.get("bible", {}).get("background") or "").strip():
         issues.append("Fixed background requires one locked description of furniture, decor and lighting")
@@ -221,7 +224,7 @@ def dialogue_words(text: str) -> int:
     if not m:
         return 0
     speech = re.sub(r"(?m)^\s*(?:[-*]\s*)?[^:\n]+:\s*", "", m.group(1))
-    speech = re.sub(r"\([^)]*\)", "", speech)
+    speech = re.sub(r"\([^)]*\)|\[[^\]]*\]", "", speech)
     return len(re.findall(r"[^\W_]+(?:['’][^\W_]+)*", speech))
 
 
@@ -456,7 +459,7 @@ def validate_plan(plan, count: int) -> list[str]:
                 beat["time_skip"] = f"about {gap} hours pass since the previous unit; open by showing what happened in that time"
             last = t
     clues = plan.get("clues")
-    if count > 1:
+    if plan.get("requires_clues", True) and count > 1:
         if not isinstance(clues, list) or not clues:
             issues.append("Plan needs clues with setup and payoff units")
         else:
@@ -510,15 +513,13 @@ def check_unit(text: str, index: int, plan: dict, spec: dict) -> list[str]:
             problems.append(f"locked descriptor for {name} changed or missing")
     if spec["devanagari"] and not re.search(r"[\u0900-\u097F]{3,}", text):
         problems.append("dialogue is not in Devanagari")
-    for key, val in (plan["outline"][index - 1].get("after") or {}).items():
-        if _norm(val) not in low:
-            problems.append(f"contracted change not shown verbatim: {key} -> {val}")
+
     if re.search(r"^\s*#{1,3}\s*master story blueprint", text, re.I | re.M):
         problems.append("unit must not repeat the Master Story Blueprint")
     for c in plan.get("clues") or []:
         if index in (c.get("setup"), c.get("payoff")) and not _mentions(c["name"], low):
             problems.append(f"clue '{c['name']}' must appear by name (setup {c['setup']}, payoff {c['payoff']})")
-    if len(text.strip()) < (600 if spec["noun"] == "scene" else 200):
+    if len(text.strip()) < min(600 if spec["noun"] == "scene" else 200, max(80, len(spec["sections"]) * 80)):
         problems.append("too short")
     return problems
 
@@ -556,8 +557,41 @@ def language_issues(text: str, spec: dict, allowed: set | None = None) -> list[s
 
 
 EXTRACT_SYS = """Read the scene and report facts as JSON only:
-{"evidence":{"prop":"exact sentence copied from the scene that shows the prop reaching its end holder/location; empty string if no sentence shows it"},"start_props":{"prop":"holder or location id when the scene BEGINS, or 'unknown'"},"end_positions":{"Name":"one id from locations, or 'unknown'"},"end_props":{"prop":"holder name or one location id, or 'unknown'"},"unexplained_moves":["Name"]}
-end_* = where each listed character/prop is when the scene ENDS. unexplained_moves = characters who appear in a new place without being shown moving."""
+{"evidence":{"prop":"exact sentence copied from the scene that shows the prop reaching its end holder/location; empty string if no sentence shows it"},"start_props":{"prop":"holder or location id when the scene BEGINS, or 'unknown'"},"end_positions":{"Name":"one id from locations, or 'unknown'"},"end_props":{"prop":"holder name or one location id, or 'unknown'"},"unexplained_moves":["Name"],"contradictions":["exact quote of any clothing, background or state contradiction"]}
+Do not infer positions from metadata/locks; read the actual visual actions and dialogue. Detect incompatible clothing even when a lock elsewhere claims the right outfit. Unchanged props can be inferred from visible placement; do not invent facts. end_* = where each listed character/prop is when the scene ENDS. unexplained_moves = characters who appear in a new place without being shown moving."""
+
+
+def scene_evidence(text: str) -> str:
+    """Copied metadata is context, never evidence of an event in the actual scene."""
+    lines = []
+    ledger = False
+    for line in text.splitlines():
+        if line.startswith("**Canonical state at scene end:**"):
+            ledger = True
+        if ledger and line.startswith("## "):
+            ledger = False
+        if ledger or re.match(r"^\s*(?:-\s+\*\*.*\(locked appearance\)|\*\*(?:Locked style|Locked negative|Background):)", line):
+            continue
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def audit_findings(review: dict, indices: list[int]) -> tuple[int, list[str], set[int]]:
+    """A numeric self-score cannot override failed or unperformed checks."""
+    if not isinstance(review, dict):
+        return 0, ["Independent audit unavailable"], set(indices)
+    notes = validate_review(review)
+    try:
+        score = max(0, min(100, int(review.get("score", 0))))
+    except (TypeError, ValueError):
+        score = 0
+    if notes:
+        score = min(score, MIN_SCORE - 1)
+    flagged = {i for i in review.get("units", []) if isinstance(i, int) and i in indices}
+    flagged |= {int(n) for x in notes for n in re.findall(r"unit (\d+)", x, re.I) if int(n) in indices}
+    if score < MIN_SCORE and not flagged:
+        flagged = set(indices)
+    return score, notes, flagged
 
 
 def fact_issues(text: str, i: int, plan: dict) -> list[str]:
@@ -569,22 +603,30 @@ def fact_issues(text: str, i: int, plan: dict) -> list[str]:
     try:
         got = parse_json(AUDIT_CALL([{"role": "system", "content": EXTRACT_SYS},
                                      {"role": "user", "content": json.dumps({"locations": plan.get("locations"), "characters": list(want_pos),
-                                      "props": sorted(set(want_props) | set(c.get("start_props") or {})), "scene": text[:14000]}, ensure_ascii=False)}], 800, True))
+                                      "props": sorted(set(want_props) | set(c.get("start_props") or {})), "scene": scene_evidence(text), "contract": c, "bible": plan["bible"]}, ensure_ascii=False)}], 800, True))
     except Exception:
-        return []  # extractor unavailable: not evidence of a defect
+        return ["Independent fact extraction unavailable; this scene has not passed verification"]
+    if not isinstance(got, dict):
+        return ["Independent fact extraction returned invalid data"]
     out = []
-    same = lambda a, b: _norm(str(a)) == _norm(str(b)) or _norm(str(a)) in _norm(str(b)) or _norm(str(b)) in _norm(str(a))
+    same = lambda a, b: _norm(str(a)) == _norm(str(b)) 
     for n, loc in want_pos.items():
         g = (got.get("end_positions") or {}).get(n)
-        if g and g != "unknown" and not same(g, loc):
+        if not g or g == "unknown":
+            out.append(f"{n} end location was not verified")
+        elif not same(g, loc):
             out.append(f"{n} must end at {loc}, scene leaves them at {g}")
     for k, v in (c.get("start_props") or {}).items():
         g = (got.get("start_props") or {}).get(k)
-        if g and g != "unknown" and not same(g, v):
+        if not g or g == "unknown":
+            out.append(f"{k} prop location was not verified")
+        elif not same(g, v):
             out.append(f"{k} must begin with/at {v} (as the previous unit left it), scene starts it with/at {g}")
     for k, v in want_props.items():
         g = (got.get("end_props") or {}).get(k)
-        if g and g != "unknown" and not same(g, v):
+        if not g or g == "unknown":
+            out.append(f"{k} prop location was not verified")
+        elif not same(g, v):
             out.append(f"{k} must end with/at {v}, scene shows {g}")
     ev = got.get("evidence") if isinstance(got.get("evidence"), dict) else {}
     low = _norm(text)
@@ -592,8 +634,11 @@ def fact_issues(text: str, i: int, plan: dict) -> list[str]:
         if v == (c.get("start_props") or {}).get(k):
             continue  # unchanged this unit: nothing to show
         q = ev.get(k)
-        if not (isinstance(q, str) and len(q) > 15 and _norm(q)[:60] in low):
+        if not (isinstance(q, str) and len(q) > 15 and q.strip() in text):
             out.append(f"Scene Actions must show {k} reaching {v} on screen (no sentence shows it)")
+    for x in got.get("contradictions") or []:
+        if isinstance(x, str) and x.strip():
+            out.append("Visible content contradicts canon: " + x)
     for n in got.get("unexplained_moves") or []:
         if isinstance(n, str):
             out.append(f"{n} changes place without being shown moving")
@@ -623,7 +668,7 @@ def deterministic_score(units: list[str], plan: dict, spec: dict) -> int:
 # ---------- prompts ----------
 
 BLUEPRINT_SYS = SYSTEM + """ Write ONLY a dense Master Story Blueprint in Markdown (under 1,800 words, bullet points): plot, characters with exact physical appearance and clothing,
-locations, supernatural/world rules, important props, timeline, mysteries, recurring clues and their payoffs, ending. No scene scripts."""
+locations, world rules relevant to the genre, essential props, timeline, causal beats and ending. Do not invent supernatural rules, mysteries, injuries or props for unrelated stories. Keep a fixed background and unchanged clothing when required. No scene scripts."""
 
 PLAN_SYS = SYSTEM + """ Turn the given blueprint into a compact plan. Return JSON only (no Markdown inside):
 {"bible":{"characters":{"Name":"locked visual descriptor, 20-40 words: age, face, hair, build, exact clothing"},"style":"ONE locked cinematic style line","negative":"ONE locked negative-constraints line"},
@@ -635,8 +680,8 @@ PLAN_SYS = SYSTEM + """ Turn the given blueprint into a compact plan. Return JSO
 "outline":[{"index":1,"moment":"what happens","time":"D1 22:00","location":"location id","end_positions":{"Name":"location id at unit end (EVERY character)"},"end_props":{"prop name":"holder or location id at unit end (EVERY tracked prop)"},"characters":["Name"],"props_in_play":["prop: who holds it / where"],"injuries":["Name: injury (cause, unit)"],"clues_planted":["clue name"],"clues_paid":["clue name"],"before":{"entity.field":"value"},"after":{"entity.field":"new short value"}}]}
 Exactly N outline items. time is 'D<day> HH:MM' and never goes backwards; a gap over 3 hours needs "time_skip":"reason shown on screen". Destroyed props stay destroyed (value 'destroyed'). A character's start position is their previous end position; anyone who moves must be shown moving.
 Times never go backwards and gaps are explained. Every prop or injury exists only from the unit that causes it;
-a dropped/lost prop stays dropped until a unit recovers it. Every clue planted is paid off in a later unit (final unit resolves the mystery). Each unit advances one causal step; every 'before' equals the state left by earlier units.
-Track props' locations, injuries, knowledge and clues as state keys. Values are 1-4 word phrases. Seed clues early and pay them off at the end."""
+a dropped/lost prop stays dropped until a unit recovers it. If the story has mystery clues, every planted clue is paid off in a later unit; otherwise an empty clues list is valid. Each unit advances one causal step; every 'before' equals the state left by earlier units.
+Track only causally necessary props, injuries and knowledge as state keys. Do not create artificial keys for confidence, emotions or status; emotional beats belong in moment. Empty state maps and empty clue lists are valid for stories without mystery. Seed recurring motifs or mystery clues only if relevant to the user's genre; do not invent a mystery for a school, comedy or ordinary story. Outfit changes are forbidden when the brief requires fixed clothes."""
 
 REVIEW_SYS = SYSTEM + """ Critique the draft against the bible, contract and brief. JSON only:
 {"checks":{"identity":true,"style":true,"continuity":true,"instructions":true,"structure":true},"issues":[]}
@@ -658,19 +703,19 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
            "Use ONLY the contract's time, location, props_in_play and injuries: invent no new props, wounds, events or locations. "
            "Characters begin at start_positions and finish at end_positions; anyone who changes place is SHOWN moving. Props begin at start_props and end at end_props. "
            "Characters not in this unit's cast stay off-screen where start_positions says. "
-           "If the contract has time_skip, the Context and first action must state and show that elapsed time. "
-           "Include every on-screen character's dialogue in Dialogue (or explicitly mark silence), and fully describe every on-screen character in the visual prompt as well as Character Details. "
+           "If the contract has time_skip, show that elapsed time in the first requested narrative/visual field, without adding a Context section. "
+           "Include dialogue only when requested. Describe actual on-screen appearances within Visual Prompt; do not rely on the injected locks as a substitute for correct visible content. "
            "Name each planted/paid clue exactly. Do not repeat the blueprint. The ending must lead directly into next_unit.")
     sys += " Do not add any sections beyond the requested headings. Character details, fixed clothing, background and actions belong inside Visual Prompt when no separate section was requested."
     if spec.get("dialogue_range"):
         lo, hi = spec["dialogue_range"]
         sys += f" Dialogue must contain {lo}–{hi} spoken words TOTAL for this scene across all speakers, excluding labels and delivery notes. Count and correct before returning."
     if spec.get("fixed_background"):
-        sys += " The background stays identical in ALL scenes: never move outdoors or add/remove background furniture, posters, windows or decor."
+        sys += " Describe the exact locked background in your actual Visual Prompt, not only metadata. The background stays identical in ALL scenes: never move outdoors or add/remove background furniture, posters, windows or decor."
     if spec.get("duration"):
         duration = spec["duration"]
         start, end = (i - 1) * duration / spec["count"], i * duration / spec["count"]
-        sys += f" This scene runs from {start:g}s to {end:g}s of the {duration}s story; actions and spoken words must fit {end-start:g}s. Include this time range in Story Line or Context."
+        sys += f" This scene runs from {start:g}s to {end:g}s of the {duration}s story; actions and spoken words must fit {end-start:g}s. Include this time range in the requested story/visual field, never add an unrequested section."
     if spec["devanagari"]:
         sys += (" Dialogue lines are pure natural Hindi in Devanagari only (no Latin letters, no words from other languages); "
                 "delivery notes in parentheses are plain English. Everything outside dialogue is plain English with no other languages.")
@@ -744,12 +789,15 @@ DIALOGUE_FIX_SYS = ("Rewrite ONLY this Dialogue section. Spoken words must be pu
                     "in parentheses. Return only the section, starting with its heading.")
 
 
-def _fix_dialogue(text: str, issues: list[str]) -> str:
+def _fix_dialogue(text: str, issues: list[str], bounds=None, devanagari=True) -> str:
     """Targeted, small repair for language-only failures: the rest of the unit is kept byte-for-byte."""
     m = re.search(r"^[ \t]*#{1,3}[ \t]*[^\n]*dialog[^\n]*\n(?:(?![ \t]*#{1,3}[ \t])[^\n]*\n?)*", text, re.I | re.M)
     if not m:
         return text
-    new = _ai([{"role": "system", "content": DIALOGUE_FIX_SYS},
+    instruction = DIALOGUE_FIX_SYS if devanagari else "Rewrite ONLY this Dialogue section. Preserve speakers, order, meaning and scene facts. Return only the section and its heading."
+    if bounds:
+        instruction += f" Exactly {sum(bounds) // 2} spoken words TOTAL across all speakers; allowed {bounds[0]}–{bounds[1]}. Speaker labels and parenthesized/bracketed delivery notes do not count. Never add commentary or word-count labels."
+    new = _ai([{"role": "system", "content": instruction},
                {"role": "user", "content": "Problems: " + "; ".join(issues) + "\n\n" + m.group(0)}], 3000).strip()
     if not re.match(r"^[ \t]*#{1,3}[^\n]*dialog", new, re.I):
         return text
@@ -760,6 +808,13 @@ def _write_and_check(i, plan, spec, brief, fix=None, draft=None, neighbours=None
     text = enforce_locks(canonical_header(_ai(_unit_messages(i, plan, spec, brief, fix, draft, neighbours), 12000, False, fix is None), i, spec), i, plan, spec)
     allowed = _allowed_words(plan)
     problems = check_unit(text, i, plan, spec) + language_issues(text, spec, allowed)
+    bounds = spec.get("dialogue_range")
+    if bounds and not bounds[0] <= dialogue_words(text) <= bounds[1]:
+        for _ in range(2):
+            text = _fix_dialogue(text, [f"Current spoken word count: {dialogue_words(text)}"], bounds, spec["devanagari"])
+            if bounds[0] <= dialogue_words(text) <= bounds[1]:
+                break
+        problems = check_unit(text, i, plan, spec) + language_issues(text, spec, allowed)
     lang = language_issues(text, spec, allowed)
     if lang and len(problems) == len(lang):  # only language problems: fix just the dialogue lines
         for _ in range(2):
@@ -811,6 +866,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         os.replace(path + ".tmp", path)
 
     if not ck["plan"]:
+        plan = None
         say("planning")
         problems: list[str] = []
         blueprint = _ai([{"role": "system", "content": BLUEPRINT_SYS},
@@ -820,10 +876,11 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         story = ""
         for _ in range(3):
             try:
-                plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS + (" The user requires a fixed background. Use ONE location for EVERY scene. Add bible.background: ONE exact locked description of the complete background, furniture, decor and lighting, reused unchanged. Do not move outdoors. Clothes remain worn and unchanged, not folded, removed or changed." if spec["fixed_background"] else "")},
-                                       {"role": "user", "content": json.dumps({"brief": brief[:6000], "blueprint": blueprint, "N": count, "repair": problems}, ensure_ascii=False)}], 8000, True))
+                plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS + (" The user requires a fixed background. Keep every supplied main character present throughout, unless absence is explicitly requested. Use a simple causal story relevant to the theme, not pranks, injuries, mysteries or unrelated props. Track only essential objects; background furniture belongs to bible.background, never duplicate it as moving props. Use ONE location for EVERY scene. Add bible.background: ONE exact locked description of the complete background, furniture, decor and lighting, reused unchanged. Do not move outdoors. Clothes remain worn and unchanged, not folded, removed or changed." if spec["fixed_background"] else "")},
+                                       {"role": "user", "content": json.dumps({"brief": brief, "blueprint": blueprint, "N": count, "repair": problems}, ensure_ascii=False)}], 8000, True))
                 if isinstance(plan, dict):
                     plan["blueprint"], plan["story"] = blueprint, story
+                    plan["requires_clues"] = bool(re.search(r"\b(?:mystery|clues?|payoffs?)\b", brief, re.I))
                 plan = normalize_plan(plan, count)
                 problems = validate_plan(plan, count) + check_fixed_background(plan, brief)
             except (ValueError, TypeError):
@@ -839,7 +896,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
 
     units: dict[int, str] = {}
     for k, t in ck["units"].items():
-        if not check_unit(t, int(k), plan, spec):
+        if not check_unit(t, int(k), plan, spec) and not language_issues(t, spec, _allowed_words(plan)) and not fact_issues(t, int(k), plan):
             units[int(k)] = t
     pending = {i: (None, None) for i in range(1, count + 1) if i not in units}
     with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
@@ -855,9 +912,8 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                 else:
                     units[i] = text; ck["units"][str(i)] = text
             save(); pending = nxt
-        for i, (problems, text) in pending.items():  # still imperfect: kept, and counted against the score below
-            if text:
-                units[i] = text
+        if pending:
+            raise OpError("Scene requirements remain unresolved: " + "; ".join(f"Scene {i}: {'; '.join(problems[:3])}" for i, (problems, text) in pending.items()))
         if len(units) < count:
             raise OpError(f"{count - len(units)} unit(s) could not be written.")
 
@@ -880,12 +936,10 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                                                      "full_outline": [{"index": o["index"], "moment": o["moment"], "time": o.get("time"), "location": o.get("location"), "after": o.get("after")} for o in plan["outline"]],
                                                      "contracts_for_these_units": [plan["outline"][i - 1] for i in idx],
                                                      "brief": brief, "requested_sections": spec["sections"], "note": "Events from units outside this window happened as the full_outline says; judge these units against it.",
-                                                     "series": window}, ensure_ascii=False)}], 2500, True))
-                        scores.append(int(a_.get("score", 0)))
-                        notes_all += [x for x in a_.get("issues", []) if isinstance(x, str)]
-                        hit = {i for i in a_.get("units", []) if isinstance(i, int) and i in idx}
-                        if int(a_.get("score", 0)) < MIN_SCORE and not hit and not any(re.search(r"unit \d+", str(x), re.I) for x in a_.get("issues", [])):
-                            hit = set(idx)  # low score but nothing named: repair the whole weak window
+                                                     "series": window, "visible_content": "\n\n".join(scene_evidence(series[i - 1]) for i in idx)}, ensure_ascii=False)}], 2500, True))
+                        window_score, notes, hit = audit_findings(a_, idx)
+                        scores.append(window_score)
+                        notes_all += notes
                         flagged |= hit
                     except (ValueError, TypeError, OpError):
                         scores.append(0)
@@ -896,6 +950,8 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                 print(f"[prompts] audit scores={scores} flagged={sorted(flagged)}", flush=True)
                 if audit_score >= MIN_SCORE:
                     break
+                if best is None or audit_score > best[0]:
+                    best = (audit_score, list(series))
                 fix = sorted({i for i in audit.get("units", []) if isinstance(i, int) and 1 <= i <= count}
                              | {int(n) for x in notes_all for n in re.findall(r"unit (\d+)", x, re.I) if 1 <= int(n) <= count})
                 if not fix or round_ == REPAIR_ROUNDS:
@@ -913,6 +969,11 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
             if best and best[0] > audit_score:  # a repair round never makes the delivered series worse
                 audit_score, series = best
             det = deterministic_score(series, plan, spec)
+        ck["units"] = {str(i): t for i, t in enumerate(series, 1)}
+        save()
+    final_issues = [f"Scene {i}: {problem}" for i, t in enumerate(series, 1) for problem in check_unit(t, i, plan, spec) + language_issues(t, spec, _allowed_words(plan))]
+    if final_issues:
+        raise OpError("Final requirements unresolved: " + "; ".join(final_issues[:8]))
     if spec.get("dialogue_range"):
         failures = [f"Scene {i}: {dialogue_words(t)} dialogue words" for i, t in enumerate(series, 1) if not spec["dialogue_range"][0] <= dialogue_words(t) <= spec["dialogue_range"][1]]
         if failures:
@@ -947,7 +1008,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
     with open(out, "w", encoding="utf-8") as f:
         f.write(document)
     return {"output": out, "mime": "text/markdown",
-            "result": {"units": count, "kind": noun, "consistency_score": score, "deterministic_score": det,
+            "result": {"runtime_sha": os.environ.get("GITHUB_SHA", "local"), "units": count, "kind": noun, "consistency_score": score, "deterministic_score": det,
                        "audit_score": audit_score, "pipeline_version": VERSION}}
 
 

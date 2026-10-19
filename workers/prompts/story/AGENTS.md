@@ -1,3 +1,5 @@
 - All story and prompt generation shares index.py; the parent entry point aliases it for compatibility. Why: one pipeline preserves checkpoints, quotas and validation.
 - Keep planning internal and assemble only requested content; each component is independently fenced unless scene grouping is requested. Why: delivery follows the brief.
 - Explicit delivery clauses select scene sections without treating input characters or constraints as deliverables; spoken-word ranges are deterministic blocking gates. Why: scene creation does not imply extra story prose or arbitrary dialogue length.
+
+- Genre-relevant causal plans permit empty clue/state maps; scene checks evaluate unstamped visible evidence and hard failures block independently of audit scores. Dialogue-only repair preserves all other fields, and selected audit rollback restores the checkpoint. Why: metadata and numerical self-scores must never stand in for requirement verification.
