@@ -26,7 +26,7 @@ from typing import Callable
 from runtime.operations import OpError
 from runtime.worker_base import Worker
 
-VERSION = 6
+VERSION = 7
 MAX_UNITS = 100
 MAX_BRIEF_CHARS = 60_000
 REPAIR_ROUNDS = 2
@@ -467,6 +467,18 @@ def validate_plan(plan, count: int) -> list[str]:
                 if not (isinstance(c, dict) and isinstance(c.get("name"), str) and isinstance(c.get("setup"), int)
                         and isinstance(c.get("payoff"), int) and 1 <= c["setup"] < c["payoff"] <= count):
                     issues.append(f"Clue {c.get('name') if isinstance(c, dict) else c} needs setup < payoff within the series")
+    wardrobe = r"\b(?:shirt|t-shirt|skirt|sweater|trousers|pants|shorts|shoes|socks|dress|uniform|coat|jacket)\b"
+    for prop, holder in list((plan.get("start_props") or {}).items()):
+        if not re.search(wardrobe, prop, re.I):
+            continue
+        if any((beat.get("end_props") or {}).get(prop, holder) != holder for beat in outline):
+            issues.append(f"Immutable wardrobe {prop} changes owner/location; keep it worn by {holder}")
+        else:
+            # Clothing is already canon; tracking it as a transported prop is a category error.
+            plan["start_props"].pop(prop, None)
+            for beat in outline:
+                for field in ("start_props", "end_props"):
+                    (beat.get(field) or {}).pop(prop, None)
     return issues
 
 
@@ -671,7 +683,7 @@ BLUEPRINT_SYS = SYSTEM + """ Write ONLY a dense Master Story Blueprint in Markdo
 locations, world rules relevant to the genre, essential props, timeline, causal beats and ending. Do not invent supernatural rules, mysteries, injuries or props for unrelated stories. Keep a fixed background and unchanged clothing when required. No scene scripts."""
 
 PLAN_SYS = SYSTEM + """ Turn the given blueprint into a compact plan. Return JSON only (no Markdown inside):
-{"bible":{"characters":{"Name":"locked visual descriptor, 20-40 words: age, face, hair, build, exact clothing"},"style":"ONE locked cinematic style line","negative":"ONE locked negative-constraints line"},
+{"bible":{"background":"exact immutable background description when required; otherwise empty string","characters":{"Name":"locked visual descriptor, 20-40 words: age, face, hair, build, exact clothing"},"style":"ONE locked cinematic style line","negative":"ONE locked negative-constraints line"},
 "locations":["short location id, e.g. foyer"],
 "start_positions":{"Name":"location id at the start of unit 1"},
 "start_props":{"prop name":"holder name or location id at the start of unit 1"},
@@ -789,6 +801,37 @@ DIALOGUE_FIX_SYS = ("Rewrite ONLY this Dialogue section. Spoken words must be pu
                     "in parentheses. Return only the section, starting with its heading.")
 
 
+def _bounded_dialogue(text: str, bounds, devanagari=False) -> str:
+    m = re.search(r"(?im)^##\s+Dialogue[^\n]*\n([\s\S]*?)(?=^##\s|\Z)", text)
+    if not m:
+        return text
+    labels = re.findall(r"(?m)^\s*(?:[-*]\s*)?(?:\*\*)?([^:\n]+?):", m.group(1))
+    labels = [re.sub(r"\([^)]*\)|\[[^\]]*\]|[*_\"]", "", x).strip() for x in labels]
+    if not labels:
+        return text
+    target = sum(bounds) // 2
+    counts = [target // len(labels) + (1 if i < target % len(labels) else 0) for i in range(len(labels))]
+    instruction = "Rewrite this dialogue with the same speakers, meaning, and scene facts. JSON only: {turns:[{speaker:string,words:[string]}]}. Exactly one turn per listed speaker in order; each words array has EXACTLY its assigned count, ONE spoken word per element (contractions count as one). No notes or labels in words. Do not repeat the original overlength lines."
+    if devanagari:
+        instruction += " All spoken words must be natural Hindi in pure Devanagari."
+    try:
+        data = parse_json(_ai([{"role": "system", "content": instruction}, {"role": "user", "content": json.dumps({"original": m.group(1), "turn_contracts": [{"speaker": label, "words": count} for label, count in zip(labels, counts)]}, ensure_ascii=False)}], 2000, True, True))
+        turns = data.get("turns")
+        if not isinstance(turns, list) or len(turns) != len(labels):
+            return text
+        lines = []
+        for label, count, turn in zip(labels, counts, turns):
+            words = turn.get("words") if isinstance(turn, dict) else None
+            if not isinstance(words, list) or len(words) != count or any(not isinstance(w, str) or len(re.findall(r"[^\W_]+(?:['’][^\W_]+)*", w)) != 1 for w in words):
+                return text
+            lines.append(f"{label}: {' '.join(words)}")
+        replacement = "## Dialogue\n" + "\n".join(lines) + "\n\n"
+        candidate = text[:m.start()] + replacement + text[m.end():]
+        return candidate if bounds[0] <= dialogue_words(candidate) <= bounds[1] else text
+    except (ValueError, TypeError, AttributeError):
+        return text
+
+
 def _fix_dialogue(text: str, issues: list[str], bounds=None, devanagari=True) -> str:
     """Targeted, small repair for language-only failures: the rest of the unit is kept byte-for-byte."""
     m = re.search(r"^[ \t]*#{1,3}[ \t]*[^\n]*dialog[^\n]*\n(?:(?![ \t]*#{1,3}[ \t])[^\n]*\n?)*", text, re.I | re.M)
@@ -811,7 +854,7 @@ def _write_and_check(i, plan, spec, brief, fix=None, draft=None, neighbours=None
     bounds = spec.get("dialogue_range")
     if bounds and not bounds[0] <= dialogue_words(text) <= bounds[1]:
         for _ in range(2):
-            text = _fix_dialogue(text, [f"Current spoken word count: {dialogue_words(text)}"], bounds, spec["devanagari"])
+            text = _bounded_dialogue(text, bounds, spec["devanagari"])
             if bounds[0] <= dialogue_words(text) <= bounds[1]:
                 break
         problems = check_unit(text, i, plan, spec) + language_issues(text, spec, allowed)

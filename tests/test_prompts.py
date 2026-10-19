@@ -245,3 +245,26 @@ def test_dialogue_only_repair_preserves_visual_and_word_bounds(monkeypatch):
 def test_subjective_state_does_not_need_literal_word():
     p = plan(3); p["outline"][1]["after"] = {"Mira.confidence": "growing"}
     assert not any("verbatim" in x for x in P.check_unit(unit(2), 2, p, SPEC))
+
+
+def test_bounded_dialogue_uses_validated_word_arrays(monkeypatch):
+    text = "## Visual Prompt\nSTABLE\n## Dialogue\nMira: too short\nRabbit: also short"
+    import json
+    def answer(messages, *args):
+        contracts = json.loads(messages[1]["content"])["turn_contracts"]
+        return json.dumps({"turns": [{"speaker": c["speaker"], "words": ["homework"] * c["words"]} for c in contracts]})
+    monkeypatch.setattr(P, "CALL", answer)
+    result = P._bounded_dialogue(text, (25, 30))
+    assert P.dialogue_words(result) == 27 and "STABLE" in result
+    monkeypatch.setattr(P, "CALL", lambda *a: '{"turns":[{"words":["too many words"]}]}')
+    assert P._bounded_dialogue(text, (25, 30)) == text
+
+
+def test_immutable_wardrobe_not_tracked_as_moving_prop():
+    p = plan(2); p["start_props"] = {"red coat": "Mira"}
+    for b in p["outline"]:
+        b["start_props"] = {"red coat": "Mira"}; b["end_props"] = {"red coat": "Mira"}
+    assert P.validate_plan(p, 2) == []
+    assert p["start_props"] == {} and p["outline"][0]["end_props"] == {}
+    p["start_props"] = {"red coat": "Mira"}; p["outline"][1]["end_props"] = {"red coat": "Rabbit"}
+    assert any("Immutable wardrobe" in x for x in P.validate_plan(p, 2))
