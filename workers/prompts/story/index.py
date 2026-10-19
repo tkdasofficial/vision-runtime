@@ -30,7 +30,7 @@ from validators import continuity as _continuity
 from validators import repair as _repair
 from validators.compliance import spoken_words as _spoken_words
 
-VERSION = 8
+VERSION = 9
 MAX_UNITS = 100
 MAX_BRIEF_CHARS = 60_000
 REPAIR_ROUNDS = 2
@@ -615,6 +615,21 @@ def audit_findings(review: dict, indices: list[int]) -> tuple[int, list[str], se
     return score, notes, flagged
 
 
+def _split_state(s: str) -> tuple[str, list[str]]:
+    """Split a holder/location label into its base and its parenthesised state qualifiers."""
+    quals = [_norm(q) for m in re.findall(r"\(([^)]*)\)", str(s)) for q in re.split(r"[,;]", m) if _norm(q)]
+    base = _norm(re.sub(r"\([^)]*\)", " ", str(s)))
+    return base, quals
+
+
+def _same_fact(observed, expected) -> bool:
+    """The base holder/location must match exactly. Every state qualifier the contract requires
+    must be present in the observed label; extra observed detail (e.g. '(left pocket, closed)')
+    is accepted. A different base holder/location always fails."""
+    ob, oq = _split_state(observed)
+    eb, eq = _split_state(expected)
+    return ob == eb and all(q in oq for q in eq)
+
 def fact_issues(text: str, i: int, plan: dict) -> list[str]:
     """Independent extraction compared deterministically with the plan's ledger (the model only reads; code judges)."""
     c = plan["outline"][i - 1]
@@ -637,7 +652,7 @@ def fact_issues(text: str, i: int, plan: dict) -> list[str]:
         if field in got and (not isinstance(got[field], list) or any(not isinstance(x, str) for x in got[field])):
             return ["Independent fact extraction returned invalid data"]
     out = []
-    same = lambda a, b: _norm(str(a)) == _norm(str(b)) 
+    same = _same_fact
     for n, loc in want_pos.items():
         g = (got.get("end_positions") or {}).get(n)
         if not g or g == "unknown":
@@ -723,6 +738,9 @@ Each issue must start with "unit N:". Score strictly: deduct for any appearance/
 
 def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | None = None, draft: str | None = None, neighbours: dict | None = None):
     c = plan["outline"][i - 1]
+    clues_due = [{"name": cl["name"], "role": "plant" if i == cl.get("setup") else "payoff",
+                  "setup": cl.get("setup"), "payoff": cl.get("payoff")}
+                 for cl in (plan.get("clues") or []) if i in (cl.get("setup"), cl.get("payoff"))]
     head = f"Begin with the line '# {spec['noun'].title()} {i}: <title>'. " if spec["multi"] else ""
     sys = (SYSTEM + f" Write ONLY {spec['noun']} {i} of {spec['count']} as a self-contained Markdown document. {head}"
            f"Use these sections as '## ' headings, in order: {'; '.join(spec['sections'])}. "
@@ -734,6 +752,10 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
            "If the contract has time_skip, show that elapsed time in the first requested narrative/visual field, without adding a Context section. "
            "Include dialogue only when requested. Describe actual on-screen appearances within Visual Prompt; do not rely on the injected locks as a substitute for correct visible content. "
            "Name each planted/paid clue exactly. Do not repeat the blueprint. The ending must lead directly into next_unit.")
+    if clues_due:
+        parts = [f"'{d['name']}' ({'plant it here by name; its payoff is planned for unit ' + str(d['payoff']) if d['role'] == 'plant' else 'pay it off here by name; it was planted in unit ' + str(d['setup'])})" for d in clues_due]
+        sys += (" This unit has mandatory planned clue(s): " + "; ".join(parts) +
+                ". Each listed clue MUST appear by its exact name in this unit's visible story text; a missing or renamed clue fails validation.")
     sys += " Do not add any sections beyond the requested headings. Character details, fixed clothing, background and actions belong inside Visual Prompt when no separate section was requested."
     if spec.get("dialogue_range"):
         lo, hi = spec["dialogue_range"]
@@ -748,7 +770,8 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
         sys += (" Dialogue lines are pure natural Hindi in Devanagari only (no Latin letters, no words from other languages); "
                 "delivery notes in parentheses are plain English. Everything outside dialogue is plain English with no other languages.")
     ctx = {"brief": brief, "bible": plan["bible"], "blueprint": plan["blueprint"],
-           "clues": plan.get("clues"), "outline": [{"index": o["index"], "moment": o["moment"], "time": o.get("time")} for o in plan["outline"]],
+           "clues": plan.get("clues"), "clues_due": clues_due,
+           "outline": [{"index": o["index"], "moment": o["moment"], "time": o.get("time")} for o in plan["outline"]],
            "previous_unit": plan["outline"][i - 2] if i > 1 else None, "contract": c,
            "next_unit": plan["outline"][i] if i < len(plan["outline"]) else None}
     msgs = [{"role": "system", "content": sys}, {"role": "user", "content": json.dumps(ctx, ensure_ascii=False)}]
