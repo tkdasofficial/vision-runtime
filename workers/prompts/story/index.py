@@ -30,7 +30,7 @@ from validators import continuity as _continuity
 from validators import repair as _repair
 from validators.compliance import spoken_words as _spoken_words
 
-VERSION = 7
+VERSION = 8
 MAX_UNITS = 100
 MAX_BRIEF_CHARS = 60_000
 REPAIR_ROUNDS = 2
@@ -577,8 +577,9 @@ def language_issues(text: str, spec: dict, allowed: set | None = None) -> list[s
 
 
 EXTRACT_SYS = """Read the scene and report facts as JSON only:
-{"evidence":{"prop":"exact sentence copied from the scene that shows the prop reaching its end holder/location; empty string if no sentence shows it"},"start_props":{"prop":"holder or location id when the scene BEGINS, or 'unknown'"},"end_positions":{"Name":"one id from locations, or 'unknown'"},"end_props":{"prop":"holder name or one location id, or 'unknown'"},"unexplained_moves":["Name"],"contradictions":["exact quote of any clothing, background or state contradiction"]}
-Do not infer positions from metadata/locks; read the actual visual actions and dialogue. Detect incompatible clothing even when a lock elsewhere claims the right outfit. Unchanged props can be inferred from visible placement; do not invent facts. end_* = where each listed character/prop is when the scene ENDS. unexplained_moves = characters who appear in a new place without being shown moving."""
+{"evidence":{"prop":"exact sentence copied from the scene that shows the prop reaching its end holder/location; empty string if no sentence shows it"},"start_props":{"prop":"full holder/location AND state when the scene BEGINS, or 'unknown'"},"end_positions":{"Name":"full room ID AND within-room spot, or 'unknown'"},"end_props":{"prop":"full holder/location AND state when the scene ENDS, or 'unknown'"},"unexplained_moves":["Name"],"contradictions":["exact quote of any clothing, background or state contradiction"]}
+The contract gives comparison labels, NOT evidence. When visible text establishes the same fact, return its EXACT contract label including within-room spots and state qualifiers, e.g. 'classroom: center-right' or 'Monkey (open)'. Do not collapse a detailed position to a room-only label. Do not discard open/closed or on-sheet qualifiers. If text describes a different fact, return that actual fact; if unavailable return 'unknown'. Never copy a contract value just because it is expected. Singular/plural wording alone may identify the same location ONLY when the actual scene establishes the same object(s) and placement; a different number of objects is a contradiction, not an alias.
+Do not infer positions from metadata/locks; read the actual visual actions and dialogue. Detect incompatible clothing even when a lock elsewhere claims the right outfit. Unchanged props can be inferred from visible placement; do not invent facts. end_* = where each listed character/prop is when the scene ENDS. unexplained_moves = characters who appear in a new place without being shown moving. Return evidence as verbatim visible text, never a paraphrase. Evidence for changed props must show the transition, not just mention the prop."""
 
 
 def scene_evidence(text: str) -> str:
@@ -620,14 +621,21 @@ def fact_issues(text: str, i: int, plan: dict) -> list[str]:
     want_pos, want_props = c.get("end_positions") or {}, c.get("end_props") or {}
     if not want_pos and not want_props:
         return []
+    visible = scene_evidence(text)
     try:
         got = parse_json(AUDIT_CALL([{"role": "system", "content": EXTRACT_SYS},
                                      {"role": "user", "content": json.dumps({"locations": plan.get("locations"), "characters": list(want_pos),
-                                      "props": sorted(set(want_props) | set(c.get("start_props") or {})), "scene": scene_evidence(text), "contract": c, "bible": plan["bible"]}, ensure_ascii=False)}], 800, True))
+                                      "props": sorted(set(want_props) | set(c.get("start_props") or {})), "scene": visible, "contract": c, "bible": plan["bible"]}, ensure_ascii=False)}], min(3000, 1000 + 160 * (len(want_props) + len(want_pos))), True))
     except Exception:
         return ["Independent fact extraction unavailable; this scene has not passed verification"]
     if not isinstance(got, dict):
         return ["Independent fact extraction returned invalid data"]
+    for field in ("start_props", "end_props", "end_positions", "evidence"):
+        if field in got and not isinstance(got[field], dict):
+            return ["Independent fact extraction returned invalid data"]
+    for field in ("contradictions", "unexplained_moves"):
+        if field in got and (not isinstance(got[field], list) or any(not isinstance(x, str) for x in got[field])):
+            return ["Independent fact extraction returned invalid data"]
     out = []
     same = lambda a, b: _norm(str(a)) == _norm(str(b)) 
     for n, loc in want_pos.items():
@@ -649,12 +657,11 @@ def fact_issues(text: str, i: int, plan: dict) -> list[str]:
         elif not same(g, v):
             out.append(f"{k} must end with/at {v}, scene shows {g}")
     ev = got.get("evidence") if isinstance(got.get("evidence"), dict) else {}
-    low = _norm(text)
     for k, v in want_props.items():
         if v == (c.get("start_props") or {}).get(k):
             continue  # unchanged this unit: nothing to show
         q = ev.get(k)
-        if not (isinstance(q, str) and len(q) > 15 and q.strip() in text):
+        if not (isinstance(q, str) and len(q) > 15 and q.strip() in visible):
             out.append(f"Scene Actions must show {k} reaching {v} on screen (no sentence shows it)")
     for x in got.get("contradictions") or []:
         if isinstance(x, str) and x.strip():
@@ -722,6 +729,7 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
            "Keep every character exactly as the bible describes (the worker inserts the locked descriptors itself). Start from the 'before' state, end at the 'after' state; never reveal later units. "
            "Use ONLY the contract's time, location, props_in_play and injuries: invent no new props, wounds, events or locations. "
            "Characters begin at start_positions and finish at end_positions; anyone who changes place is SHOWN moving. Props begin at start_props and end at end_props. "
+           "In the requested Visual Prompt/Scene Actions, explicitly show each changed prop's initial holder/location, the transfer action, and final holder/location. Show unchanged props staying in place. Include the precise within-room character spots and object state (open/closed, on sheet, beside sheet) in visible prose, not only metadata. "
            "Characters not in this unit's cast stay off-screen where start_positions says. "
            "If the contract has time_skip, show that elapsed time in the first requested narrative/visual field, without adding a Context section. "
            "Include dialogue only when requested. Describe actual on-screen appearances within Visual Prompt; do not rely on the injected locks as a substitute for correct visible content. "
@@ -749,7 +757,20 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
             msgs.append({"role": "user", "content": "Approved neighbouring units (stay consistent with them, do not rewrite them): " + json.dumps(neighbours, ensure_ascii=False)})
         msgs += [{"role": "assistant", "content": draft},
                  {"role": "user", "content": f"Fix ONLY these problems and return the full corrected {spec['noun']}: " + "; ".join(fix[:10])}]
+        spatial_only = all(re.search(r"must (?:begin with/at|end with/at|end at)|prop location was not verified|end location was not verified|Scene Actions must show|changes place without being shown", issue) for issue in fix)
+        if spatial_only and "Visual Prompt" in spec["sections"] and "Scene Actions" not in spec["sections"]:
+            msgs[-1]["content"] = ("Fix ONLY the Visual Prompt section for these spatial findings. Return ONLY '## Visual Prompt' and its corrected content, no other headings. Preserve every unaffected appearance/background detail. Show the initial placement, actual transfer/movement, and final precise placement/state in visible action sentences. Do not alter dialogue or the plan. Findings: " + "; ".join(fix))
     return msgs
+
+
+def _splice_visual_repair(draft: str, response: str) -> str:
+    """A spatial repair cannot overwrite an already accepted dialogue or add sections."""
+    pattern = r"(?im)^##\s+Visual Prompt[^\n]*\n[\s\S]*?(?=^##\s|\Z)"
+    original = re.search(pattern, draft)
+    replacement = re.fullmatch(r"(?is)\s*##\s+Visual Prompt[^\n]*\n(?:(?!\n\s*#{1,6}\s).)+\s*", response)
+    if not original or not replacement:
+        return draft
+    return draft[:original.start()] + response.strip() + "\n\n" + draft[original.end():]
 
 
 def _insert_after_heading(text: str, words: tuple, block: str) -> str:
@@ -858,7 +879,11 @@ def _fix_dialogue(text: str, issues: list[str], bounds=None, devanagari=True) ->
 
 
 def _write_and_check(i, plan, spec, brief, fix=None, draft=None, neighbours=None):
-    text = enforce_locks(canonical_header(_ai(_unit_messages(i, plan, spec, brief, fix, draft, neighbours), 12000, False, fix is None), i, spec), i, plan, spec)
+    messages = _unit_messages(i, plan, spec, brief, fix, draft, neighbours)
+    response = _ai(messages, 12000, False, fix is None)
+    if draft and messages[-1]["content"].startswith("Fix ONLY the Visual Prompt section"):
+        response = _splice_visual_repair(draft, response)
+    text = enforce_locks(canonical_header(response, i, spec), i, plan, spec)
     allowed = _allowed_words(plan)
     problems = check_unit(text, i, plan, spec) + language_issues(text, spec, allowed)
     bounds = spec.get("dialogue_range")
