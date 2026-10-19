@@ -159,3 +159,27 @@ def test_explicit_one_box_per_scene_and_story_only():
 def test_extracted_module_is_single_implementation():
     from workers.prompts.story import index as S
     assert S is P
+
+
+MONKEY_BRIEF = "Create a story of 10 scenes, each scene have 25 to 30 words dialogue, and give me both visual prompt & dialogue of each scenes. Characters: A Monkey and A Rabbit. Theme: School & Homework. Make sure the background also constant."
+
+def test_explicit_scene_delivery_not_input_profiles():
+    assert P.unit_count(MONKEY_BRIEF) == (10, "scene")
+    assert P.required_sections(MONKEY_BRIEF) == ["Visual Prompt", "Dialogue"]
+    assert not P.wants_story(MONKEY_BRIEF)
+
+def test_dialogue_word_range_gate():
+    assert P.dialogue_range(MONKEY_BRIEF) == (25, 30)
+    p = plan(3)
+    spec = {**SPEC, "sections": ["Visual Prompt", "Dialogue"], "dialogue_range": (25, 30)}
+    for count, fails in [(24, True), (25, False), (30, False), (31, True)]:
+        text = unit(2) + "\n## Dialogue\nMira (quietly): " + " ".join(["homework"] * count)
+        assert P.dialogue_words(text) == count
+        assert any("spoken words" in x for x in P.check_unit(text, 2, p, spec)) == fails
+
+def test_explicit_delivery_filters_unrequested_sections():
+    text = "# Scene 1: School\n\n## Story Line\nEXTRA\n\n## Visual Prompt\nMonkey and Rabbit in class.\n\n## Dialogue\nMonkey: Hello.\n\n## Camera Direction\nEXTRA CAMERA"
+    out = P.assemble_output({"story": "EXTRA STORY"}, [text], {"story": False, "noun": "scene"}, MONKEY_BRIEF)
+    assert out.count("````markdown") == 2
+    assert "EXTRA" not in out
+    assert "Monkey: Hello." in out

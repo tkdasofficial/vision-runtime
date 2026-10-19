@@ -26,7 +26,7 @@ from typing import Callable
 from runtime.operations import OpError
 from runtime.worker_base import Worker
 
-VERSION = 4
+VERSION = 5
 MAX_UNITS = 100
 MAX_BRIEF_CHARS = 60_000
 REPAIR_ROUNDS = 2
@@ -183,6 +183,34 @@ def unit_count(brief: str, given=None) -> tuple[int, str]:
     return n, noun
 
 
+SECTION_PATTERNS = [("Story Line", r"story line"), ("Character Details", r"character (?:details|profiles|descriptions)"), ("Visual Prompt", r"visual prompts?"), ("Dialogue", r"dialogues?"), ("Sound Effects", r"sound (?:effects?|design)"), ("Camera Direction", r"camera(?: direction)?")]
+
+
+def explicit_sections(brief: str) -> list[str]:
+    # Delivery instructions, not the character/theme/constraints supplied as inputs.
+    clauses = re.findall(r"(?:give|provide|return|output|deliver|show)\s+(?:me\s+)?([^.!?\n]+)", brief, re.I)
+    if re.search(r"\b(?:only|just)\b", brief, re.I):
+        clauses.append(brief)
+    chosen = [name for name, pattern in SECTION_PATTERNS if any(re.search(pattern, c, re.I) for c in clauses)]
+    return chosen
+
+
+def dialogue_range(brief: str):
+    m = re.search(r"(\d+)\s*(?:to|[-–])\s*(\d+)\s+words?\s+(?:of\s+)?dialog(?:ue|ues)", brief, re.I)
+    if not m:
+        m = re.search(r"dialog(?:ue|ues)[^.!?\n]{0,40}?(\d+)\s*(?:to|[-–])\s*(\d+)\s+words?", brief, re.I)
+    return (int(m.group(1)), int(m.group(2))) if m else None
+
+
+def dialogue_words(text: str) -> int:
+    m = re.search(r"(?im)^##\s+Dialogue[^\n]*\n([\s\S]*?)(?=^##\s|\Z)", text)
+    if not m:
+        return 0
+    speech = re.sub(r"(?m)^\s*(?:[-*]\s*)?[^:\n]+:\s*", "", m.group(1))
+    speech = re.sub(r"\([^)]*\)", "", speech)
+    return len(re.findall(r"[^\W_]+(?:['’][^\W_]+)*", speech))
+
+
 def required_sections(brief: str) -> list[str]:
     """Numbered section list from the brief ("1. Scene Title and Context: ..."), else the default prompt fields."""
     found = re.findall(r"^\s*(\d{1,2})[.)]\s+([A-Z][^:\n]{2,60}):", brief, re.M)
@@ -192,6 +220,8 @@ def required_sections(brief: str) -> list[str]:
             seq.append(re.sub(r"\s*\([^)]*\)", "", name).strip())
     if len(seq) >= 3:
         return seq
+    if explicit_sections(brief):
+        return explicit_sections(brief)
     if re.search(r"\b(?:only|just)\b", brief, re.I):
         requested = [("Story Line", r"story line"), ("Character Details", r"character (?:details|profiles|descriptions)"), ("Visual Prompt", r"visual prompts?"), ("Dialogue", r"dialogues?"), ("Sound Effects", r"sound (?:effects?|design)"), ("Camera Direction", r"camera")]
         chosen = [name for name, pattern in requested if re.search(pattern, brief, re.I)]
@@ -205,6 +235,8 @@ def required_sections(brief: str) -> list[str]:
 def wants_story(brief: str) -> bool:
     """Full story text only when the brief asks for it and does not forbid it."""
     if re.search(r"\b(?:do not|don't|dont|never|without)\s+(?:generate|write|include|give)?\s*(?:the\s+)?(?:finished|full|complete)?\s*story\b", brief, re.I):
+        return False
+    if explicit_sections(brief) and not re.search(r"(?:give|provide|include|return)\s+(?:me\s+)?(?:the\s+)?(?:full|complete|finished)\s+story", brief, re.I):
         return False
     return bool(re.search(r"\b(?:write|create|generate|give|make)\s+(?:me\s+)?(?:a\s+|the\s+|an\s+)?(?:(?:\d+\s*[- ]?(?:seconds?|minutes?)|short|full|complete|horror|detailed|supernatural)\s+){0,4}(?:story|stories)\b", brief, re.I))
 
@@ -221,7 +253,7 @@ def duration_seconds(brief: str) -> int:
 
 
 def grouped_scenes(brief: str) -> bool:
-    return bool(re.search(r"(?:each|every|per)[^.\n]{0,100}(?:markdown|box|block|prompt)[^.\n]{0,140}(?:all|details|visual|dialogue|character)|(?:all|every)[^.\n]{0,60}details[^.\n]{0,60}(?:each|per)\s+(?:scene|prompt)", brief, re.I))
+    return bool(re.search(r"(?:each|every|per)[^.\n]{0,100}(?:markdown\s+(?:box|block)|box|block)[^.\n]{0,140}(?:all|details|visual|dialogue|character)|(?:each|every|per)\s+(?:visual\s+)?prompt[^.\n]{0,60}(?:has|have|contains|includes)[^.\n]{0,80}(?:all|details|dialogue|character)|(?:all|every)[^.\n]{0,60}details[^.\n]{0,60}(?:each|per)\s+(?:scene|prompt)", brief, re.I))
 
 
 def assemble_output(plan: dict, series: list[str], spec: dict, brief: str) -> str:
@@ -234,6 +266,11 @@ def assemble_output(plan: dict, series: list[str], spec: dict, brief: str) -> st
         blocks += [title, fence(body)]
     if spec.get("prompts", True):
         for text in series:
+            selected = explicit_sections(brief)
+            if selected:
+                parts = re.split(r"(?m)(?=^## )", text)
+                title = text.splitlines()[0] if text.startswith("# ") else ""
+                text = title + "\n\n" + "\n\n".join(part.strip() for part in parts if any(re.match(r"^##\s+" + re.escape(name) + r"\b", part, re.I) for name in selected))
             if grouped_scenes(brief) or spec["noun"] != "scene":
                 blocks.append(fence(text))
                 continue
@@ -443,6 +480,11 @@ def check_unit(text: str, index: int, plan: dict, spec: dict) -> list[str]:
         key = _norm(sec).split(" and ")[0][:24]
         if not any(key in h for h in heads):
             problems.append(f"missing section: {sec}")
+    bounds = spec.get("dialogue_range")
+    if bounds:
+        words = dialogue_words(text)
+        if not bounds[0] <= words <= bounds[1]:
+            problems.append(f"Dialogue has {words} spoken words; required {bounds[0]}–{bounds[1]} per scene, excluding speaker labels and delivery notes")
     bible = plan["bible"]
     for lock in ("style", "negative"):
         if _norm(bible[lock]) not in low:
@@ -603,6 +645,12 @@ def _unit_messages(i: int, plan: dict, spec: dict, brief: str, fix: list[str] | 
            "If the contract has time_skip, the Context and first action must state and show that elapsed time. "
            "Include every on-screen character's dialogue in Dialogue (or explicitly mark silence), and fully describe every on-screen character in the visual prompt as well as Character Details. "
            "Name each planted/paid clue exactly. Do not repeat the blueprint. The ending must lead directly into next_unit.")
+    sys += " Do not add any sections beyond the requested headings. Character details, fixed clothing, background and actions belong inside Visual Prompt when no separate section was requested."
+    if spec.get("dialogue_range"):
+        lo, hi = spec["dialogue_range"]
+        sys += f" Dialogue must contain {lo}–{hi} spoken words TOTAL for this scene across all speakers, excluding labels and delivery notes. Count and correct before returning."
+    if spec.get("fixed_background"):
+        sys += " The background stays identical in ALL scenes: never move outdoors or add/remove background furniture, posters, windows or decor."
     if spec.get("duration"):
         duration = spec["duration"]
         start, end = (i - 1) * duration / spec["count"], i * duration / spec["count"]
@@ -654,14 +702,14 @@ def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
         chars = "\n".join(f"- **{n} (locked appearance):** {b['characters'][n]}" for n in cast
                            if f"**{n} (locked appearance):**" not in text)
         if chars:
-            text = _insert_after_heading(text, ("character",), chars)
+            text = _insert_after_heading(text, ("character",) if "Character Details" in spec["sections"] else ("visual",), chars)
     text = _insert_after_heading(text, ("visual",), f"**Locked style:** {b['style']}")
-    text = _insert_after_heading(text, ("negative",), f"**Locked negative:** {b['negative']}")
+    text = _insert_after_heading(text, ("negative",) if any("negative" in x.lower() for x in spec["sections"]) else ("visual",), f"**Locked negative:** {b['negative']}")
     state = [f"- {k}: {v}" for k, v in (c.get("after") or {}).items()]
     state += [f"- {n} ends at: {v}" for n, v in (c.get("end_positions") or {}).items()]
     state += [f"- {k} is with/at: {v}" for k, v in (c.get("end_props") or {}).items()]
     where = f"- Time: {c.get('time', '')} | Location: {c.get('location', '')}"
-    text = _insert_after_heading(text, ("continuity",), "**Canonical state at scene end:**\n" + "\n".join([where] + state))
+    text = _insert_after_heading(text, ("continuity",) if "Continuity" in spec["sections"] else ("visual",), "**Canonical state at scene end:**\n" + "\n".join([where] + state))
     return text
 
 
@@ -714,7 +762,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
     if not brief or len(brief) > MAX_BRIEF_CHARS:
         raise OpError("The brief is missing or too large.")
     count, noun = unit_count(brief, params.get("count"))
-    spec = {"count": count, "noun": noun, "multi": count > 1, "sections": required_sections(brief), "devanagari": wants_devanagari(brief), "story": wants_story(brief), "prompts": bool(re.search(r"\bprompts?\b", brief, re.I)) or not wants_story(brief), "duration": duration_seconds(brief)}
+    spec = {"count": count, "noun": noun, "multi": count > 1, "sections": required_sections(brief), "devanagari": wants_devanagari(brief), "story": wants_story(brief), "prompts": bool(re.search(r"\bprompts?\b", brief, re.I)) or not wants_story(brief), "duration": duration_seconds(brief), "dialogue_range": dialogue_range(brief), "fixed_background": bool(re.search(r"background[^.!?\n]{0,40}(?:constant|same|unchanged|fixed)", brief, re.I))}
     t0 = time.time()
 
     def say(stage):  # stage + elapsed seconds only; never prompt text
@@ -811,7 +859,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
                                                     {"role": "user", "content": json.dumps({"units": idx, "bible": plan["bible"], "clues": plan.get("clues"),
                                                      "full_outline": [{"index": o["index"], "moment": o["moment"], "time": o.get("time"), "location": o.get("location"), "after": o.get("after")} for o in plan["outline"]],
                                                      "contracts_for_these_units": [plan["outline"][i - 1] for i in idx],
-                                                     "note": "Events from units outside this window happened as the full_outline says; judge these units against it.",
+                                                     "brief": brief, "requested_sections": spec["sections"], "note": "Events from units outside this window happened as the full_outline says; judge these units against it.",
                                                      "series": window}, ensure_ascii=False)}], 2500, True))
                         scores.append(int(a_.get("score", 0)))
                         notes_all += [x for x in a_.get("issues", []) if isinstance(x, str)]
@@ -845,6 +893,10 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
             if best and best[0] > audit_score:  # a repair round never makes the delivered series worse
                 audit_score, series = best
             det = deterministic_score(series, plan, spec)
+    if spec.get("dialogue_range"):
+        failures = [f"Scene {i}: {dialogue_words(t)} dialogue words" for i, t in enumerate(series, 1) if not spec["dialogue_range"][0] <= dialogue_words(t) <= spec["dialogue_range"][1]]
+        if failures:
+            raise OpError("Dialogue word limit unresolved: " + "; ".join(failures))
     score = min(det, audit_score)
     if spec["multi"] and score < MIN_SCORE:
         raise OpError(f"Consistency score {score}% is below the {MIN_SCORE}% bar; the series was not approved.")
