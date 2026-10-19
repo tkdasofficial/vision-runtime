@@ -196,16 +196,19 @@ def explicit_sections(brief: str) -> list[str]:
 
 
 def fixed_background(brief: str) -> bool:
-    return bool(re.search(r"background[^.!?\n]{0,40}(?:constant|same|unchanged|fixed)", brief, re.I))
+    return bool(re.search(r"background[^.!?\n]{0,40}(?:constant|same|unchanged|fixed)|(?:constant|same|unchanged|fixed)[^.!?\n]{0,40}background", brief, re.I))
 
 
 def check_fixed_background(plan: dict, brief: str) -> list[str]:
     if not fixed_background(brief):
         return []
     locations = {beat.get("location") for beat in plan.get("outline", [])}
+    allowed_locations = set(plan.get("locations") or [])
+    # Room-level scenery IDs differ from physical positions within that room.
+    # A desk/chair position is not a second background; a named different room is.
     for beat in plan.get("outline", []):
-        locations.update((beat.get("start_positions") or {}).values())
-        locations.update((beat.get("end_positions") or {}).values())
+        locations.update(v for v in (beat.get("start_positions") or {}).values() if v in allowed_locations)
+        locations.update(v for v in (beat.get("end_positions") or {}).values() if v in allowed_locations)
     issues = [] if len(locations) == 1 else ["Fixed background requires the same location in every scene; do not move outside"]
     if not str(plan.get("bible", {}).get("background") or "").strip():
         issues.append("Fixed background requires one locked description of furniture, decor and lighting")
@@ -515,13 +518,14 @@ def check_unit(text: str, index: int, plan: dict, spec: dict) -> list[str]:
         if not bounds[0] <= words <= bounds[1]:
             problems.append(f"Dialogue has {words} spoken words; required {bounds[0]}–{bounds[1]} per scene, excluding speaker labels and delivery notes")
     bible = plan["bible"]
+    visual_requested = any(re.search(r"visual|character|subject|style|setting", sec, re.I) for sec in spec["sections"])
     for lock in ("style", "negative"):
-        if _norm(bible[lock]) not in low:
+        if visual_requested and _norm(bible[lock]) not in low:
             problems.append(f"{lock} lock not copied verbatim")
-    if spec.get("fixed_background") and _norm(bible.get("background", "")) not in low:
+    if visual_requested and spec.get("fixed_background") and _norm(bible.get("background", "")) not in low:
         problems.append("locked background description missing or changed")
     for name in plan["outline"][index - 1].get("characters", []):
-        if _norm(bible["characters"][name]) not in low:
+        if visual_requested and _norm(bible["characters"][name]) not in low:
             problems.append(f"locked descriptor for {name} changed or missing")
     if spec["devanagari"] and not re.search(r"[\u0900-\u097F]{3,}", text):
         problems.append("dialogue is not in Devanagari")
@@ -770,6 +774,8 @@ def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
     """Locks are written by the worker, not trusted to the model: every unit carries the identical canonical
     character descriptors, style line, negative line and contracted end state, so they cannot drift."""
     b, c = plan["bible"], plan["outline"][i - 1]
+    if not any(re.search(r"visual|character|subject|style|setting", sec, re.I) for sec in spec["sections"]):
+        return text
     cast = c.get("characters", [])
     if cast:
         chars = "\n".join(f"- **{n} (locked appearance):** {b['characters'][n]}" for n in cast
@@ -919,10 +925,21 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         story = ""
         for _ in range(3):
             try:
-                plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS + (" The user requires a fixed background. Keep every supplied main character present throughout, unless absence is explicitly requested. Use a simple causal story relevant to the theme, not pranks, injuries, mysteries or unrelated props. Track only essential objects; background furniture belongs to bible.background, never duplicate it as moving props. Use ONE location for EVERY scene. Add bible.background: ONE exact locked description of the complete background, furniture, decor and lighting, reused unchanged. Do not move outdoors. Clothes remain worn and unchanged, not folded, removed or changed." if spec["fixed_background"] else "")},
+                plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS + (" The user requires a fixed background. Keep every supplied main character present throughout, unless absence is explicitly requested. Use a simple causal story relevant to the theme, not pranks, injuries, mysteries or unrelated props. Track only essential objects; background furniture belongs to bible.background, never duplicate it as moving props. Use ONE short location ID for EVERY scene, such as classroom. start_positions/end_positions are ROOM IDs only, never desks, seats, left/right or standing/sitting. Put seating and gestures only in moment. Add bible.background: ONE exact locked description of the complete background, furniture, decor and lighting, reused unchanged. Do not move outdoors. Clothes remain worn and unchanged, not folded, removed or changed." if spec["fixed_background"] else "")},
                                        {"role": "user", "content": json.dumps({"brief": brief, "blueprint": blueprint, "N": count, "repair": problems}, ensure_ascii=False)}], 8000, True))
                 if isinstance(plan, dict):
                     plan["blueprint"], plan["story"] = blueprint, story
+                    if spec["fixed_background"]:
+                        # Request-level immutable room is authoritative. Fine-grained seating
+                        # remains in the moment/visual, not in the inter-room ledger.
+                        rooms = {b.get("location") for b in plan.get("outline", []) if isinstance(b, dict)}
+                        if len(rooms) == 1:
+                            room = next(iter(rooms))
+                            cast = list((plan.get("bible") or {}).get("characters") or {})
+                            plan["locations"] = [room]
+                            plan["start_positions"] = {name: room for name in cast}
+                            for beat in plan["outline"]:
+                                beat["end_positions"] = {name: room for name in cast}
                     plan["requires_clues"] = bool(re.search(r"\b(?:mystery|clues?|payoffs?)\b", brief, re.I))
                 plan = normalize_plan(plan, count)
                 problems = validate_plan(plan, count) + check_fixed_background(plan, brief)

@@ -268,3 +268,38 @@ def test_immutable_wardrobe_not_tracked_as_moving_prop():
     assert p["start_props"] == {} and p["outline"][0]["end_props"] == {}
     p["start_props"] = {"red coat": "Mira"}; p["outline"][1]["end_props"] = {"red coat": "Rabbit"}
     assert any("Immutable wardrobe" in x for x in P.validate_plan(p, 2))
+
+
+def test_dialogue_only_does_not_add_visual_metadata():
+    p = plan(3); spec = {**SPEC, "sections": ["Dialogue"]}
+    text = "# Prompt 2: Talk\n## Dialogue\nMira: " + "homework " * 25
+    assert P.enforce_locks(text, 2, p, spec) == text
+    assert P.check_unit(text, 2, p, spec) == []
+
+
+def test_full_pipeline_requested_two_fields(tmp_path, monkeypatch):
+    import json
+    brief = "Create a story of 2 scenes, each scene have 25 to 30 words dialogue, and give me visual prompt & dialogue."
+    p = plan(2); p["requires_clues"] = False; p["clues"] = []
+    def writer(messages, *args):
+        if "Master Story Blueprint" in messages[0]["content"]: return "b" * 300
+        if "compact plan" in messages[0]["content"]: return json.dumps(p)
+        payload = json.loads(messages[1]["content"]); i = payload["contract"]["index"]
+        return f"# Scene {i}: Homework\n## Visual Prompt\nMira works carefully on her homework.\n## Dialogue\nMira: " + "homework " * 27
+    monkeypatch.setattr(P, "CALL", writer)
+    checks = {c: True for c in P.CATEGORIES}
+    monkeypatch.setattr(P, "AUDIT_CALL", lambda *a: json.dumps({"score": 95, "checks": checks, "issues": [], "units": []}))
+    result = P.run_prompts({"prompt": brief}, str(tmp_path))
+    output = open(result["output"]).read()
+    assert output.count("````markdown") == 4
+    assert "## Story Line" not in output and "Master Story Blueprint" not in output
+    assert result["result"]["consistency_score"] == 95
+
+
+def test_fixed_background_allows_positions_within_same_room():
+    p = plan(3); p["locations"] = ["street"]; p["bible"]["background"] = "same street"
+    p["outline"][1]["end_positions"] = {"Mira": "beside the lamp"}
+    assert P.check_fixed_background(p, MONKEY_BRIEF) == []
+    p["locations"].append("outside")
+    p["outline"][1]["end_positions"] = {"Mira": "outside"}
+    assert P.check_fixed_background(p, MONKEY_BRIEF)
