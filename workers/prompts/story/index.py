@@ -207,8 +207,8 @@ def check_fixed_background(plan: dict, brief: str) -> list[str]:
     # Room-level scenery IDs differ from physical positions within that room.
     # A desk/chair position is not a second background; a named different room is.
     for beat in plan.get("outline", []):
-        locations.update(v for v in (beat.get("start_positions") or {}).values() if v in allowed_locations)
-        locations.update(v for v in (beat.get("end_positions") or {}).values() if v in allowed_locations)
+        locations.update(v for v in (beat.get("start_positions") or {}).values() if v in allowed_locations or re.search(r"\b(?:outside|outdoors|another room|hallway|corridor)\b", str(v), re.I))
+        locations.update(v for v in (beat.get("end_positions") or {}).values() if v in allowed_locations or re.search(r"\b(?:outside|outdoors|another room|hallway|corridor)\b", str(v), re.I))
     issues = [] if len(locations) == 1 else ["Fixed background requires the same location in every scene; do not move outside"]
     if not str(plan.get("bible", {}).get("background") or "").strip():
         issues.append("Fixed background requires one locked description of furniture, decor and lighting")
