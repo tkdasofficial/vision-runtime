@@ -183,3 +183,19 @@ def test_explicit_delivery_filters_unrequested_sections():
     assert out.count("````markdown") == 2
     assert "EXTRA" not in out
     assert "Monkey: Hello." in out
+
+
+def test_fixed_background_rejects_outdoor_scene():
+    p = plan(3); p["bible"]["background"] = "Green board, two desks, pastel curtains, warm sunlight"
+    assert P.check_fixed_background(p, MONKEY_BRIEF) == []
+    p["outline"][2]["location"] = "outside"
+    assert any("same location" in x for x in P.check_fixed_background(p, MONKEY_BRIEF))
+
+def test_visual_only_locks_do_not_add_ledger_or_profiles():
+    p = plan(3); p["bible"]["background"] = "Green board and two desks"
+    spec = {**SPEC, "sections": ["Visual Prompt", "Dialogue"], "fixed_background": True}
+    text = P.enforce_locks("# Prompt 2: School\n## Visual Prompt\nMira works.\n## Dialogue\nMira: Hello.", 2, p, spec)
+    assert "Green board and two desks" in text
+    assert "Canonical state" not in text
+    assert "## Character Details" not in text
+    assert text.count("## ") == 2

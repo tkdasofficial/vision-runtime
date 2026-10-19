@@ -195,6 +195,20 @@ def explicit_sections(brief: str) -> list[str]:
     return chosen
 
 
+def fixed_background(brief: str) -> bool:
+    return bool(re.search(r"background[^.!?\n]{0,40}(?:constant|same|unchanged|fixed)", brief, re.I))
+
+
+def check_fixed_background(plan: dict, brief: str) -> list[str]:
+    if not fixed_background(brief):
+        return []
+    locations = {beat.get("location") for beat in plan.get("outline", [])}
+    issues = [] if len(locations) == 1 else ["Fixed background requires the same location in every scene; do not move outside"]
+    if not str(plan.get("bible", {}).get("background") or "").strip():
+        issues.append("Fixed background requires one locked description of furniture, decor and lighting")
+    return issues
+
+
 def dialogue_range(brief: str):
     m = re.search(r"(\d+)\s*(?:to|[-–])\s*(\d+)\s+words?\s+(?:of\s+)?dialog(?:ue|ues)", brief, re.I)
     if not m:
@@ -489,6 +503,8 @@ def check_unit(text: str, index: int, plan: dict, spec: dict) -> list[str]:
     for lock in ("style", "negative"):
         if _norm(bible[lock]) not in low:
             problems.append(f"{lock} lock not copied verbatim")
+    if spec.get("fixed_background") and _norm(bible.get("background", "")) not in low:
+        problems.append("locked background description missing or changed")
     for name in plan["outline"][index - 1].get("characters", []):
         if _norm(bible["characters"][name]) not in low:
             problems.append(f"locked descriptor for {name} changed or missing")
@@ -705,6 +721,10 @@ def enforce_locks(text: str, i: int, plan: dict, spec: dict) -> str:
             text = _insert_after_heading(text, ("character",) if "Character Details" in spec["sections"] else ("visual",), chars)
     text = _insert_after_heading(text, ("visual",), f"**Locked style:** {b['style']}")
     text = _insert_after_heading(text, ("negative",) if any("negative" in x.lower() for x in spec["sections"]) else ("visual",), f"**Locked negative:** {b['negative']}")
+    if spec.get("fixed_background") and b.get("background"):
+        text = _insert_after_heading(text, ("visual",), f"**Background:** {b['background']}")
+    if "Continuity" not in spec["sections"]:
+        return text
     state = [f"- {k}: {v}" for k, v in (c.get("after") or {}).items()]
     state += [f"- {n} ends at: {v}" for n, v in (c.get("end_positions") or {}).items()]
     state += [f"- {k} is with/at: {v}" for k, v in (c.get("end_props") or {}).items()]
@@ -762,7 +782,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
     if not brief or len(brief) > MAX_BRIEF_CHARS:
         raise OpError("The brief is missing or too large.")
     count, noun = unit_count(brief, params.get("count"))
-    spec = {"count": count, "noun": noun, "multi": count > 1, "sections": required_sections(brief), "devanagari": wants_devanagari(brief), "story": wants_story(brief), "prompts": bool(re.search(r"\bprompts?\b", brief, re.I)) or not wants_story(brief), "duration": duration_seconds(brief), "dialogue_range": dialogue_range(brief), "fixed_background": bool(re.search(r"background[^.!?\n]{0,40}(?:constant|same|unchanged|fixed)", brief, re.I))}
+    spec = {"count": count, "noun": noun, "multi": count > 1, "sections": required_sections(brief), "devanagari": wants_devanagari(brief), "story": wants_story(brief), "prompts": bool(re.search(r"\bprompts?\b", brief, re.I)) or not wants_story(brief), "duration": duration_seconds(brief), "dialogue_range": dialogue_range(brief), "fixed_background": fixed_background(brief)}
     t0 = time.time()
 
     def say(stage):  # stage + elapsed seconds only; never prompt text
@@ -800,12 +820,12 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         story = ""
         for _ in range(3):
             try:
-                plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS},
+                plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS + (" The user requires a fixed background. Use ONE location for EVERY scene. Add bible.background: ONE exact locked description of the complete background, furniture, decor and lighting, reused unchanged. Do not move outdoors. Clothes remain worn and unchanged, not folded, removed or changed." if spec["fixed_background"] else "")},
                                        {"role": "user", "content": json.dumps({"brief": brief[:6000], "blueprint": blueprint, "N": count, "repair": problems}, ensure_ascii=False)}], 8000, True))
                 if isinstance(plan, dict):
                     plan["blueprint"], plan["story"] = blueprint, story
                 plan = normalize_plan(plan, count)
-                problems = validate_plan(plan, count)
+                problems = validate_plan(plan, count) + check_fixed_background(plan, brief)
             except (ValueError, TypeError):
                 problems = ["Invalid planning JSON"]
             print(f"[prompts] plan attempt problems={len(problems)} first={problems[0][:60] if problems else ''} keys={sorted(plan)[:12] if isinstance(plan, dict) else '-'} bible={sorted(plan.get('bible') or {})[:8] if isinstance(plan, dict) and isinstance(plan.get('bible'), dict) else '-'}", flush=True)
@@ -814,7 +834,7 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         if not ck["plan"]:
             raise OpError("Planning remains unresolved: " + "; ".join(problems[:4]))
     plan = ck["plan"]
-    if validate_plan(plan, count):
+    if validate_plan(plan, count) or check_fixed_background(plan, brief):
         raise OpError("Saved plan is invalid.")
 
     units: dict[int, str] = {}
