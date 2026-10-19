@@ -25,6 +25,10 @@ from typing import Callable
 
 from runtime.operations import OpError
 from runtime.worker_base import Worker
+from validators import Constraint, Contract, validate
+from validators import continuity as _continuity
+from validators import repair as _repair
+from validators.compliance import spoken_words as _spoken_words
 
 VERSION = 7
 MAX_UNITS = 100
@@ -200,19 +204,12 @@ def fixed_background(brief: str) -> bool:
 
 
 def check_fixed_background(plan: dict, brief: str) -> list[str]:
-    if not fixed_background(brief):
-        return []
-    locations = {beat.get("location") for beat in plan.get("outline", [])}
-    allowed_locations = set(plan.get("locations") or [])
-    # Room-level scenery IDs differ from physical positions within that room.
-    # A desk/chair position is not a second background; a named different room is.
-    for beat in plan.get("outline", []):
-        locations.update(v for v in (beat.get("start_positions") or {}).values() if v in allowed_locations or re.search(r"\b(?:outside|outdoors|another room|hallway|corridor)\b", str(v), re.I))
-        locations.update(v for v in (beat.get("end_positions") or {}).values() if v in allowed_locations or re.search(r"\b(?:outside|outdoors|another room|hallway|corridor)\b", str(v), re.I))
-    issues = [] if len(locations) == 1 else ["Fixed background requires the same location in every scene; do not move outside"]
-    if not str(plan.get("bible", {}).get("background") or "").strip():
-        issues.append("Fixed background requires one locked description of furniture, decor and lighting")
-    return issues
+    """Compatibility wrapper over validators.continuity (canonical room IDs, positions are not rooms)."""
+    return [f.legacy() for f in fixed_background_findings(plan, brief)]
+
+
+def fixed_background_findings(plan: dict, brief: str):
+    return _continuity.check_fixed_background(plan, fixed_background(brief))
 
 
 def dialogue_range(brief: str):
@@ -223,12 +220,19 @@ def dialogue_range(brief: str):
 
 
 def dialogue_words(text: str) -> int:
-    m = re.search(r"(?im)^##\s+Dialogue[^\n]*\n([\s\S]*?)(?=^##\s|\Z)", text)
-    if not m:
-        return 0
-    speech = re.sub(r"(?m)^\s*(?:[-*]\s*)?[^:\n]+:\s*", "", m.group(1))
-    speech = re.sub(r"\([^)]*\)|\[[^\]]*\]", "", speech)
-    return len(re.findall(r"[^\W_]+(?:['’][^\W_]+)*", speech))
+    return _spoken_words(text)
+
+
+def build_contract(brief: str, count: int) -> Contract:
+    """Source-backed requirements compiled before any model call."""
+    cs = [Constraint("units.count", "count", count, "count")]
+    if explicit_sections(brief):
+        cs.append(Constraint("sections", "fields", explicit_sections(brief), "delivery clause"))
+    if dialogue_range(brief):
+        cs.append(Constraint("dialogue.words", "range", list(dialogue_range(brief)), "dialogue word range"))
+    if fixed_background(brief):
+        cs.append(Constraint("background.fixed", "invariant", True, "background constant"))
+    return Contract("story_generate", cs)
 
 
 def required_sections(brief: str) -> list[str]:
@@ -923,31 +927,43 @@ def run_prompts(params: dict, workdir: str, progress: Callable[[str], None] | No
         if spec["devanagari"]:  # the blueprint is all-English: strip stray non-Latin script deterministically
             blueprint = re.sub(r"[\u0900-\u0DFF]+[^\n]*?(?=[.;\n]|$)", "", blueprint)
         story = ""
-        for _ in range(3):
+        contract = build_contract(brief, count)
+        loop = _repair.RepairLoop(max_rounds=2)
+        rejected = None      # previous candidate, sent back with structured findings
+        findings: list[dict] = []
+        for attempt in range(1 + loop.max_rounds):
+            report = None
             try:
-                plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS + (" The user requires a fixed background. Keep every supplied main character present throughout, unless absence is explicitly requested. Use a simple causal story relevant to the theme, not pranks, injuries, mysteries or unrelated props. Track only essential objects; background furniture belongs to bible.background, never duplicate it as moving props. Use ONE short location ID for EVERY scene, such as classroom. start_positions/end_positions are ROOM IDs only, never desks, seats, left/right or standing/sitting. Put seating and gestures only in moment. Add bible.background: ONE exact locked description of the complete background, furniture, decor and lighting, reused unchanged. Do not move outdoors. Clothes remain worn and unchanged, not folded, removed or changed." if spec["fixed_background"] else "")},
-                                       {"role": "user", "content": json.dumps({"brief": brief, "blueprint": blueprint, "N": count, "repair": problems}, ensure_ascii=False)}], 8000, True))
+                payload = {"brief": brief, "blueprint": blueprint, "N": count, "repair": problems}
+                if rejected is not None:
+                    payload.update({"rejected_candidate": rejected, "findings": findings,
+                                    "instruction": "Fix ONLY the listed findings in rejected_candidate; keep every other field identical."})
+                plan = parse_json(_ai([{"role": "system", "content": PLAN_SYS + (" The user requires a fixed background. Keep every supplied main character present throughout, unless absence is explicitly requested. Use a simple causal story relevant to the theme, not pranks, injuries, mysteries or unrelated props. Track only essential objects; background furniture belongs to bible.background, never duplicate it as moving props. Declare locations as a list with exactly ONE short room ID, such as classroom, and use that exact ID as every scene's location. start_positions/end_positions use 'ROOM_ID: spot' (e.g. 'classroom: front desk'); the spot is a within-room position, never a new room. Add bible.background: ONE exact locked description of the complete background, furniture, decor and lighting, reused unchanged. Do not move outdoors. Clothes remain worn and unchanged, not folded, removed or changed." if spec["fixed_background"] else "")},
+                                       {"role": "user", "content": json.dumps(payload, ensure_ascii=False)}], 8000, True))
                 if isinstance(plan, dict):
                     plan["blueprint"], plan["story"] = blueprint, story
-                    if spec["fixed_background"]:
-                        # Request-level immutable room is authoritative. Fine-grained seating
-                        # remains in the moment/visual, not in the inter-room ledger.
-                        rooms = {b.get("location") for b in plan.get("outline", []) if isinstance(b, dict)}
-                        if len(rooms) == 1:
-                            room = next(iter(rooms))
-                            cast = list((plan.get("bible") or {}).get("characters") or {})
-                            plan["locations"] = [room]
-                            plan["start_positions"] = {name: room for name in cast}
-                            for beat in plan["outline"]:
-                                beat["end_positions"] = {name: room for name in cast}
                     plan["requires_clues"] = bool(re.search(r"\b(?:mystery|clues?|payoffs?)\b", brief, re.I))
+                    if spec["fixed_background"] and not plan.get("locations"):
+                        first = next((b.get("location") for b in plan.get("outline") or [] if isinstance(b, dict) and b.get("location")), None)
+                        if first:
+                            plan["locations"] = [first]
+                            plan.setdefault("normalizations", []).append({"path": "locations", "reason": "declared from first scene location"})
                 plan = normalize_plan(plan, count)
-                problems = validate_plan(plan, count) + check_fixed_background(plan, brief)
+                report = validate(plan, {"profile": "story.plan", "contract": contract, "count": count})
+                problems = validate_plan(plan, count) + [f.legacy() for f in report.errors if f.code.startswith("continuity.")]
+                findings = [f.to_dict() for f in report.errors]
             except (ValueError, TypeError):
-                problems = ["Invalid planning JSON"]
-            print(f"[prompts] plan attempt problems={len(problems)} first={problems[0][:60] if problems else ''} keys={sorted(plan)[:12] if isinstance(plan, dict) else '-'} bible={sorted(plan.get('bible') or {})[:8] if isinstance(plan, dict) and isinstance(plan.get('bible'), dict) else '-'}", flush=True)
+                problems, findings = ["Invalid planning JSON"], [{"code": "structural.invalid_json", "message": "Invalid planning JSON"}]
+            safe = report.safe_log() if report else {"status": "failed", "codes": ["structural.invalid_json"]}
+            print(f"[prompts] plan attempt={attempt + 1} problems={len(problems)} report={json.dumps(safe)}", flush=True)
             if not problems:
                 ck["plan"] = plan; save(); break
+            rejected = plan if isinstance(plan, dict) else None
+            if report:
+                loop.record(report)
+            if not loop.should_continue():
+                break
+            loop.next()
         if not ck["plan"]:
             raise OpError("Planning remains unresolved: " + "; ".join(problems[:4]))
     plan = ck["plan"]

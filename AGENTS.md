@@ -2,3 +2,4 @@
 - Workers (workers/<name>/index.py) only scope-check and verify outputs through runtime/worker_base.py; conversion logic stays in runtime/operations.py + format_ops.py. Why: no duplicated generation logic.
 - Story and prompt generation live in workers/prompts/story/index.py via the prompts entry-point alias; only prompts.yml passes provider secrets for generation operations. Why: one implementation and no credentials in file workflows.
 - Every workflow is workflow_dispatch only. Why: nothing runs unless VISION dispatches a job.
+- Shared pure validators live in root `validators/` (contracts/findings/reports, structural, compliance, continuity on canonical room IDs, scoped repair); workers call `validate(artifact, context)` and keep legacy string wrappers. Validators never mutate input or call providers. Why: one rule set per check, read-only evidence, repairs scoped to finding paths.

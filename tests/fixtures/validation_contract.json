@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "operation": "story_generate",
+  "constraints": [
+    {"id": "units.count", "kind": "count", "value": 10, "source": "10 scenes"},
+    {"id": "sections", "kind": "fields", "value": ["Visual Prompt", "Dialogue"], "source": "give me both visual prompt & dialogue"},
+    {"id": "dialogue.words", "kind": "range", "value": [25, 30], "source": "25 to 30 words dialogue"},
+    {"id": "background.fixed", "kind": "invariant", "value": true, "source": "background also constant"}
+  ],
+  "unit_cases": [
+    {"name": "ok_26_words", "status": "passed", "codes": [],
+     "text": "# Scene 1: Class\n\n## Visual Prompt\nMonkey and Rabbit at desks.\n\n## Dialogue\nMonkey: (whispers) I forgot my homework at home today and I am really worried now.\nRabbit: Do not worry, my friend, we can finish it together quickly at break."},
+    {"name": "too_short", "status": "failed", "codes": ["compliance.dialogue_words"],
+     "text": "# Scene 1: Class\n\n## Visual Prompt\nMonkey sits.\n\n## Dialogue\nMonkey: Hello there friend."},
+    {"name": "missing_visual", "status": "failed", "codes": ["compliance.dialogue_words", "compliance.missing_section"],
+     "text": "# Scene 1: Class\n\n## Dialogue\nMonkey: Hi."}
+  ]
+}

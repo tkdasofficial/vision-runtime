@@ -1,3 +1,4 @@
+import json
 import os, sys
 import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -303,3 +304,21 @@ def test_fixed_background_allows_positions_within_same_room():
     p["locations"].append("outside")
     p["outline"][1]["end_positions"] = {"Mira": "outside"}
     assert P.check_fixed_background(p, MONKEY_BRIEF)
+
+
+def test_plan_repair_receives_rejected_candidate_and_findings(tmp_path, monkeypatch):
+    calls = []
+    bad = plan(3); bad["bible"] = {**BIBLE, "background": "Green board"}; bad["outline"][2]["location"] = "outside"
+
+    def fake(messages, max_tokens, json_mode=False, think=False):
+        calls.append(messages[-1]["content"])
+        return json.dumps(bad) if json_mode else "B" * 300
+    monkeypatch.setattr(P, "CALL", fake)
+    try:
+        P.run_prompts({"prompt": MONKEY_BRIEF.replace("10 scenes", "3 scenes")}, str(tmp_path))
+    except Exception:
+        pass
+    plans = [json.loads(c) for c in calls if c.startswith("{") and '"repair"' in c]
+    assert len(plans) == 3 and "rejected_candidate" not in plans[0]
+    assert plans[1]["rejected_candidate"]["outline"][2]["location"] == "outside"
+    assert any(f["code"] == "continuity.left_background" and f["path"] == "outline[2].location" for f in plans[1]["findings"])
