@@ -125,3 +125,37 @@ def test_prop_move_needs_quoted_evidence(monkeypatch):
     assert any("show bell" in x for x in P.fact_issues("Mira looks at the bell.", 1, p))
     monkeypatch.setattr(P, "AUDIT_CALL", lambda *a, **k: '{"evidence":{"bell":"Mira lifts the bell off the nail"},"end_props":{"bell":"Mira"},"start_props":{"bell":"nail"}}')
     assert P.fact_issues("Mira lifts the bell off the nail and pockets it.", 1, p) == []
+
+
+def test_timed_story_and_all_scene_prompts():
+    brief = "Write a 40 seconds story and give me all scenes prompts"
+    assert P.duration_seconds(brief) == 40
+    assert P.unit_count(brief) == (5, "scene")
+    assert P.wants_story(brief)
+    assert P.wants_story("Create a story with 4 scenes")
+    assert not P.wants_story("Generate exactly 10 scene-generation prompts for a supernatural horror story")
+
+
+def test_inline_story_default_components_and_hidden_plan():
+    p = {"blueprint": "SECRET PLAN", "story": "# The Door\n\nMira opens it."}
+    spec = {"story": True, "noun": "scene"}
+    unit = "# Scene 1: Arrival\n\n## Story Line\nMira arrives.\n\n## Visual Prompt\nMira at the door.\n\n## Dialogue\nMira: Hello."
+    out = P.assemble_output(p, [unit], spec, "Write a story and scene prompts")
+    assert out.startswith("The Door\n\n````markdown\nMira opens it.")
+    assert "SECRET PLAN" not in out and "Blueprint" not in out
+    assert out.count("````markdown") == 4
+    assert out.count("Mira arrives.") == 1
+
+
+def test_explicit_one_box_per_scene_and_story_only():
+    p = {"story": "# Door\n\nMira opens it."}
+    unit = "# Scene 1: Door\n\n## Visual Prompt\nMira.\n\n## Dialogue\nHello."
+    out = P.assemble_output(p, [unit], {"story": False, "noun": "scene"}, "Each scene markdown block has all details: visual prompt and dialogue")
+    assert out.count("````markdown") == 1 and "## Dialogue" in out
+    out = P.assemble_output(p, [unit], {"story": True, "prompts": False, "noun": "scene"}, "Write a story")
+    assert out.count("````markdown") == 1 and "Visual Prompt" not in out
+
+
+def test_extracted_module_is_single_implementation():
+    from workers.prompts.story import index as S
+    assert S is P

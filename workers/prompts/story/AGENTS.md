@@ -1,0 +1,2 @@
+- All story and prompt generation shares index.py; the parent entry point aliases it for compatibility. Why: one pipeline preserves checkpoints, quotas and validation.
+- Keep planning internal and assemble only requested content; each component is independently fenced unless scene grouping is requested. Why: delivery follows the brief.

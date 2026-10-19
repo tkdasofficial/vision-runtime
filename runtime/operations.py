@@ -191,7 +191,7 @@ def op_video_convert(inp, params, workdir):
 from runtime import format_ops as F  # noqa: E402
 
 def _prompts(inp, params, workdir):
-    from workers.prompts.index import run_prompts
+    from workers.prompts.story.index import run_prompts
     return run_prompts(params, workdir, params.get("_progress"))
 
 
